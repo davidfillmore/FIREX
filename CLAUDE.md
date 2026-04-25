@@ -35,5 +35,19 @@ Wildfire analysis with global atmospheric models and observational datasets.
 
 - New datasets: add a fetcher to `scripts/`, stage at `~/Data/<DATASET>/`, document in the table above.
 - Fetchers must be idempotent and resumable (skip files already present, retry transient failures).
+- Fetchers must use a lockfile (PID in `_fetch_<dataset>.lock`), per-request `--max-time` on curl (not just `--connect-timeout`), and `.part` cleanup on start. See `scripts/fetch_qfed.sh` for the canonical pattern.
 - Env-override fetcher parameters where reasonable (year range, species, dest path) so re-runs don't require code edits.
 - AMI transfers: AMI hostname / SSH config not yet captured — confirm before scripting AMI-side fetches.
+
+## Running a long transfer
+
+For any transfer expected to run more than a few minutes, launch detached so it survives the terminal/session closing and the Mac going to sleep:
+
+```
+nohup caffeinate -i ~/FIREX/scripts/fetch_<dataset>.sh \
+      >> ~/Data/<DATASET>/_fetch_<dataset>.out 2>&1 < /dev/null &
+```
+
+Verify it's truly detached: `ps -o ppid= -p <PID>` should print `1` (reparented to launchd).
+
+Monitor: `tail -f ~/Data/<DATASET>/_fetch_<dataset>.log`. Stop: `pkill -f fetch_<dataset>.sh` (lockfile auto-cleans via EXIT trap).
