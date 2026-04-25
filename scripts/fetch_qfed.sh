@@ -13,6 +13,15 @@ SPECIES=(${QFED_SPECIES:-bc oc pm25 co so2 no nh3})
 
 mkdir -p "$DEST_ROOT"
 LOG="${DEST_ROOT}/_fetch_qfed.log"
+LOCK="${DEST_ROOT}/_fetch_qfed.lock"
+
+if [[ -f "$LOCK" ]] && kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null; then
+  echo "fetch_qfed.sh already running (PID $(cat "$LOCK")); exiting" >&2
+  exit 1
+fi
+echo $$ > "$LOCK"
+trap 'rm -f "$LOCK"' EXIT
+
 find "$DEST_ROOT" -name '*.part' -delete 2>/dev/null || true
 
 log() { printf '[%s] %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$LOG" >&2; }
