@@ -36,7 +36,7 @@ fetch_one() {
 
   if [[ -s "$dest" ]]; then return 100; fi
   mkdir -p "$dest_dir"
-  if curl -fsS --retry 3 --retry-delay 2 --connect-timeout 30 \
+  if curl -fsS --retry 3 --retry-delay 2 --connect-timeout 30 --max-time 120 \
         -o "${dest}.part" "$url"; then
     mv "${dest}.part" "$dest"
     return 0
