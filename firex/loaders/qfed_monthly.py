@@ -34,7 +34,9 @@ def load_qfed_monthly(
             month = int(month_dir.name[1:])
             month_start = pd.Timestamp(year=year, month=month, day=1)
             for sp in species:
-                files = sorted(month_dir.glob(f"qfed2.emis_{sp}.005.*.nc4"))
+                # Glob is collection-agnostic — real data uses .061., synthetic
+                # fixtures use .005. Both formats are otherwise identical.
+                files = sorted(month_dir.glob(f"qfed2.emis_{sp}.*.nc4"))
                 if not files:
                     continue
                 src = xr.open_mfdataset(files, combine="by_coords")["biomass"]

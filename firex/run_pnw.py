@@ -111,9 +111,17 @@ def _stage2_loaders(cfg: dict, out_dir: Path, mask_path: Path, force: bool) -> d
             logger.info("[stage 2] VIIRS %s → %s (%d files)", plat, out_path, len(files))
         out[key] = out_path
 
-    # MERRA-2 aer + slv
+    # MERRA-2 aer + slv (slv is optional — skip if not staged)
     for coll, key in [("aer", "merra2_aer"), ("slv", "merra2_slv")]:
-        files = _glob_files(cfg["paths"][key], "*.nc4")
+        coll_root = Path(cfg["paths"][key]).expanduser()
+        files = _glob_files(coll_root, "*.nc4")
+        if not files:
+            logger.warning(
+                "[stage 2] MERRA-2 %s: no files at %s — skipping (predictors using "
+                "this collection will be dropped from regression at stage 5)",
+                coll, coll_root,
+            )
+            continue
         out_path = data_dir / f"merra2_{coll}.nc"
         if force or not output_is_fresh(out_path, files):
             atomic_to_netcdf(merra2_monthly.load_merra2_monthly(files, coll, mask=mask), out_path)
@@ -131,17 +139,17 @@ def _stage2_loaders(cfg: dict, out_dir: Path, mask_path: Path, force: bool) -> d
         logger.info("[stage 2] QFED → %s", out_path)
     out["qfed"] = out_path
 
-    # AERONET — single file expected to be the most recent monthly aggregate
-    aeronet_files = _glob_files(cfg["paths"]["aeronet"], "*.nc")
+    # AERONET — directory of per-month files (real layout) or single fixture file
+    aeronet_root = Path(cfg["paths"]["aeronet"]).expanduser()
+    aeronet_files = _glob_files(aeronet_root, "AeroNet_*.nc")
     if aeronet_files:
-        latest = max(aeronet_files, key=lambda p: p.stat().st_mtime)
         out_path = data_dir / "aeronet_pnw.nc"
-        if force or not output_is_fresh(out_path, [latest]):
-            atomic_to_netcdf(aeronet.load_aeronet(latest, region=region), out_path)
-            logger.info("[stage 2] AERONET → %s", out_path)
+        if force or not output_is_fresh(out_path, aeronet_files):
+            atomic_to_netcdf(aeronet.load_aeronet(aeronet_root, region=region), out_path)
+            logger.info("[stage 2] AERONET → %s (%d monthly files)", out_path, len(aeronet_files))
         out["aeronet"] = out_path
     else:
-        logger.warning("No AERONET files found; aeronet stage skipped")
+        logger.warning("No AERONET files found at %s; aeronet stage skipped", aeronet_root)
 
     return out
 
@@ -190,6 +198,11 @@ def _stage5_regression(merged_path: Path, cfg: dict, out_dir: Path, force: bool)
         logger.info("[stage 5] skipped (fresh)")
         return out_csv
     merged = xr.open_dataset(merged_path).load()
+    # Drop predictors not present (e.g. merra2_slv_TQV when slv data isn't staged).
+    predictors = [p for p in cfg["regression"]["predictors"] if p in merged]
+    dropped = [p for p in cfg["regression"]["predictors"] if p not in merged]
+    if dropped:
+        logger.warning("[stage 5] dropping missing predictors: %s", dropped)
     rows = []
     for response in [
         "ceres_toa_sw_all", "ceres_toa_sw_clr",
@@ -200,12 +213,14 @@ def _stage5_regression(merged_path: Path, cfg: dict, out_dir: Path, force: bool)
     ]:
         if response not in merged:
             continue
+        if not predictors:
+            continue
         result = regression.fit_radiative_efficiency(
             merged, response=response,
-            predictors=cfg["regression"]["predictors"],
+            predictors=predictors,
             hac_lags=cfg["regression"]["hac_lags"],
         )
-        for var in cfg["regression"]["predictors"]:
+        for var in predictors:
             rows.append(
                 {
                     "response": response,
