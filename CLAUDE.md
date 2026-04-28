@@ -37,6 +37,7 @@ Wildfire analysis with global atmospheric models and observational datasets.
 | MODIS Aqua C6.1 L2 (cataloged, not staged) | — | `/ASDC_archive/MODIS/Aqua/C61/{YYYY}/{DOY}/` (AMI) | HDF4 5-min granules: MYD02SS1, MYD03, MYD04_L2, MYD08_D3. |
 | VIIRS monthly L3 (SNPP + NOAA-20) | `~/Data/VIIRS/AERDB_M3_VIIRS_{SNPP,NOAA20}/` | LAADS coll **5200** (`~/.laads_token`) via `scripts/fetch_viirs_monthly.sh` | AERDB (Deep Blue) only — **AERDT is L2-only** on VIIRS for both platforms; no D3/M3 published. SNPP from ~2012-03, NOAA-20 from 2018. ~6 MB/file. |
 | VIIRS J1 L2 (cataloged, not staged) | — | `/ASDC_archive/VIIRS/J1/002/{YYYY}/{DOY}/` (AMI) | NetCDF 6-min granules: AERDB_L2 + AERDT_L2, 2018–present. |
+| CERES EBAF Ed4.2.1 (TOA + Surface monthly) | `~/Data/CERES_EBAF/ceres/CERES_EBAF_Edition4.2.1_200003-202512.nc` | ASDC (`~/.netrc`) — `data.asdc.earthdata.nasa.gov/asdc-prod-protected/CERES/CERES_EBAF_Edition4.2.1/2000.03.01/` | Single global 1°×1° monthly file, 2000-03 → 2025-12 (310 months, 247 vars: 72 TOA + 144 SFC + 31 cloud/solar/aux), ~1.9 GiB. ASDC publishes one rolling granule (not month-by-month) so refresh = re-download the latest `Edition4.2.1_200003-{YYYYMM}.nc` from CMR. Ed4.2.1 supersedes Ed4.2 (Section 7 DQS fix); old `Edition4.2_200003-202407.nc` retired. No fetcher script — pulled manually with `curl --netrc -L -b ~/.urs_cookies -c ~/.urs_cookies`. |
 
 **Notable absence in ASDC:** no MOD14/MYD14 (active fire), no MCD64 (burned area). Pull from LAADS or FIRMS if needed.
 
