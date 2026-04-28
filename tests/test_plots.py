@@ -79,6 +79,11 @@ def test_save_figure_writes_png(tmp_path):
     save_figure(fig, out)
     assert out.exists()
     assert out.stat().st_size > 0
+    # PDF companion is written alongside.
+    pdf = out.with_suffix(".pdf")
+    assert pdf.exists() and pdf.stat().st_size > 0
+    # No leftover .tmp files.
+    assert not list(tmp_path.glob("*.tmp.*"))
 
 
 def test_plot_aod_total_timeseries(tmp_path):

@@ -28,13 +28,20 @@ def setup_style() -> None:
 
 
 def save_figure(fig, path: Path) -> None:
+    """Write `fig` atomically as both `path` (PNG @ 300 DPI from NCAR style)
+    and `path.pdf` (vector). Each format goes through a `.tmp.<ext>` rename
+    so partial writes never appear under the final name."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    # matplotlib infers format from extension, so keep the original extension
-    # on the temp path (e.g. fig.png → fig.tmp.png, not fig.png.tmp).
-    tmp = path.with_name(path.stem + ".tmp" + path.suffix)
-    fig.savefig(tmp)
-    tmp.rename(path)
+    # Write the requested format plus PDF alongside (deduped if path is already pdf).
+    suffixes = list(dict.fromkeys([path.suffix, ".pdf"]))
+    for ext in suffixes:
+        target = path.with_suffix(ext)
+        # matplotlib infers format from extension, so keep the original extension
+        # on the temp path (e.g. fig.png → fig.tmp.png, not fig.png.tmp).
+        tmp = target.with_name(target.stem + ".tmp" + target.suffix)
+        fig.savefig(tmp)
+        tmp.rename(target)
     plt.close(fig)
 
 
