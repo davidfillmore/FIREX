@@ -144,7 +144,9 @@ def build_aeronet() -> None:
     """AERONET monthly site file (~3 PNW sites)."""
     months = _months()
     sites = ["Trinidad_Head", "Railroad_Valley", "Bondville"]
-    site_lat = np.array([41.05, 38.5, 40.05])
+    # Trinidad_Head fudged 2° north (real 41.05°N is just south of PNW
+    # lat_min=42°) so the fixture has at least one site inside the bbox.
+    site_lat = np.array([43.0, 38.5, 40.05])
     site_lon = np.array([-124.15, -115.7, -88.4])
     ds = xr.Dataset(
         {

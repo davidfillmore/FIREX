@@ -4,6 +4,7 @@ import xarray as xr
 
 from firex.loaders.ceres_ebaf import load_ceres_ebaf
 from firex.loaders.modis_monthly import load_modis_monthly
+from firex.loaders.aeronet import load_aeronet
 from firex.loaders.merra2_monthly import load_merra2_monthly
 from firex.loaders.qfed_monthly import load_qfed_monthly
 from firex.loaders.viirs_monthly import load_viirs_monthly
@@ -128,3 +129,13 @@ def test_qfed_skips_2016(tmp_path, fixtures_dir):
         (dst_dir / new_name).write_bytes(f.read_bytes())
     ds = load_qfed_monthly(base, species=["bc"], mask=_pnw_mask())
     assert ds.dims["time"] == 0
+
+
+def test_aeronet_filters_to_pnw_sites(fixtures_dir):
+    ds = load_aeronet(
+        fixtures_dir / "aeronet_synth.nc", region=REGIONS["pacific-northwest"]
+    )
+    sites = list(ds["site"].values)
+    assert "Trinidad_Head" in sites
+    # Bondville (40.05, -88.4) is outside the PNW bbox; should be filtered out.
+    assert "Bondville" not in sites
