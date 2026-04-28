@@ -21,6 +21,10 @@ from firex.plots import (
     plot_seasonal_climatology,
     plot_qfed_emissions_timeseries,
     plot_cloud_fraction_timeseries,
+    plot_scatter_dF_TOA_vs_smoke,
+    plot_scatter_dF_SFC_vs_smoke,
+    plot_aeronet_vs_modis_scatter,
+    plot_merra2_obs_scaling,
 )
 
 
@@ -124,3 +128,33 @@ def test_plot_cloud_fraction(tmp_path):
     setup_style()
     plot_cloud_fraction_timeseries(_synth_merged(), tmp_path / "p12.png")
     assert (tmp_path / "p12.png").exists()
+
+
+def test_plot_scatter_toa(tmp_path):
+    setup_style()
+    plot_scatter_dF_TOA_vs_smoke(_synth_merged(), tmp_path / "p6.png")
+    assert (tmp_path / "p6.png").exists()
+
+
+def test_plot_scatter_sfc(tmp_path):
+    setup_style()
+    plot_scatter_dF_SFC_vs_smoke(_synth_merged(), tmp_path / "p7.png")
+    assert (tmp_path / "p7.png").exists()
+
+
+def test_plot_aeronet_vs_modis(tmp_path):
+    setup_style()
+    times = pd.date_range("2000-03", periods=300, freq="MS")
+    aeronet = xr.Dataset(
+        {"aeronet_aod_550": (("time", "site"), np.full((times.size, 2), 0.1))},
+        coords={"time": times, "site": ["Trinidad_Head", "Railroad_Valley"]},
+    )
+    plot_aeronet_vs_modis_scatter(_synth_merged(), aeronet, tmp_path / "p11.png")
+    assert (tmp_path / "p11.png").exists()
+
+
+def test_plot_merra2_obs_scaling(tmp_path):
+    setup_style()
+    ds = _synth_merged().assign(merra2_aer_TOTEXTTAU=("time", np.full(300, 0.18)))
+    plot_merra2_obs_scaling(ds, tmp_path / "p13.png")
+    assert (tmp_path / "p13.png").exists()

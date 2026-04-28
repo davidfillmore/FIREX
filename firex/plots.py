@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 import xarray as xr
 from davinci_monet.plots.style import apply_ncar_style
 
@@ -168,4 +169,89 @@ def plot_cloud_fraction_timeseries(ds: xr.Dataset, output) -> None:
     ax.set_ylabel("Cloud fraction")
     ax.set_title("CERES total-column cloud fraction — Pacific Northwest")
     _annotate_caption(fig, ds)
+    save_figure(fig, output)
+
+
+def _scatter_with_ols(ax, x: np.ndarray, y: np.ndarray, label: str) -> None:
+    valid = np.isfinite(x) & np.isfinite(y)
+    x, y = x[valid], y[valid]
+    ax.scatter(x, y, s=10, alpha=0.5)
+    if x.size >= 3:
+        slope, intercept = np.polyfit(x, y, 1)
+        xs = np.linspace(x.min(), x.max(), 50)
+        ax.plot(xs, slope * xs + intercept, color="C3", lw=1.5)
+        # SE estimate from residuals
+        yhat = slope * x + intercept
+        resid = y - yhat
+        sxx = ((x - x.mean()) ** 2).sum()
+        se = np.sqrt((resid ** 2).sum() / (x.size - 2) / sxx) if x.size > 2 else float("nan")
+        r2 = 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum() if y.var() > 0 else 0
+        ax.text(
+            0.05, 0.95,
+            f"β = {slope:.1f} ± {se:.1f}\nn = {x.size}\nR² = {r2:.2f}",
+            transform=ax.transAxes, va="top", fontsize=9,
+            bbox=dict(facecolor="white", alpha=0.8, edgecolor="none"),
+        )
+    ax.set_title(label)
+
+
+def _scatter_pair(ds, smoke_var: str, all_var: str, clr_var: str, ylabel: str, output) -> None:
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5), sharey=True)
+    smoke = ds[smoke_var].values
+    _scatter_with_ols(axes[0], smoke, ds[clr_var].values, "clear-sky")
+    _scatter_with_ols(axes[1], smoke, ds[all_var].values, "all-sky")
+    axes[0].set_ylabel(ylabel)
+    for ax in axes:
+        ax.set_xlabel("Smoke AOD (MODIS Terra)")
+    _annotate_caption(fig, ds, methods="OLS regression on monthly anomalies")
+    save_figure(fig, output)
+
+
+def plot_scatter_dF_TOA_vs_smoke(ds, output) -> None:
+    _scatter_pair(
+        ds, smoke_var="smoke_aod_terra",
+        all_var="ceres_toa_sw_all_anom", clr_var="ceres_toa_sw_clr_anom",
+        ylabel="ΔF_TOA_SW (W m⁻²)", output=output,
+    )
+
+
+def plot_scatter_dF_SFC_vs_smoke(ds, output) -> None:
+    _scatter_pair(
+        ds, smoke_var="smoke_aod_terra",
+        all_var="ceres_sfc_sw_down_all_anom", clr_var="ceres_sfc_sw_down_clr_anom",
+        ylabel="ΔF_SFC_SW↓ (W m⁻²)", output=output,
+    )
+
+
+def plot_aeronet_vs_modis_scatter(ds, aeronet, output) -> None:
+    fig, ax = plt.subplots(figsize=(6, 6))
+    if aeronet is not None and "aeronet_aod_550" in aeronet:
+        for site in aeronet["site"].values:
+            modis = ds["modis_terra_aod"].interp(time=aeronet["time"])
+            site_aod = aeronet["aeronet_aod_550"].sel(site=site)
+            ax.scatter(site_aod, modis, s=10, alpha=0.6, label=str(site))
+        lim = max(np.nanmax(aeronet["aeronet_aod_550"].values), float(ds["modis_terra_aod"].max()))
+        ax.plot([0, lim], [0, lim], "k--", lw=0.8)
+    ax.set_xlabel("AERONET AOD 550 nm")
+    ax.set_ylabel("MODIS Terra gridcell AOD")
+    ax.set_title("AERONET vs. MODIS — PNW sites")
+    ax.legend(fontsize=8)
+    _annotate_caption(fig, ds)
+    save_figure(fig, output)
+
+
+def plot_merra2_obs_scaling(ds, output) -> None:
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4))
+    axes[0].scatter(ds["modis_terra_aod"], ds["merra2_aer_TOTEXTTAU"], s=10, alpha=0.5)
+    lim = float(max(ds["modis_terra_aod"].max(), ds["merra2_aer_TOTEXTTAU"].max()))
+    axes[0].plot([0, lim], [0, lim], "k--", lw=0.8)
+    axes[0].set_xlabel("MODIS Terra AOD")
+    axes[0].set_ylabel("MERRA-2 TOTEXTTAU")
+    axes[0].set_title("Magnitude comparison")
+    ratio = ds["merra2_aer_TOTEXTTAU"] / ds["modis_terra_aod"]
+    axes[1].plot(ds["time"], ratio, lw=1.0)
+    axes[1].set_xlabel("Year")
+    axes[1].set_ylabel("MERRA-2 / MODIS")
+    axes[1].set_title("Scaling-factor time series")
+    _annotate_caption(fig, ds, methods="ratio used to validate MERRA-2 fractional split, not magnitude")
     save_figure(fig, output)
