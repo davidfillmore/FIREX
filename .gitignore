@@ -208,3 +208,6 @@ __marimo__/
 
 # FIREX
 tests/fixtures/qfed_synth/
+output/pacific-northwest/data/
+output/pacific-northwest/logs/
+output/pacific-northwest/plots/
