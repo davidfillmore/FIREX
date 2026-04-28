@@ -3,6 +3,7 @@ import pytest
 import xarray as xr
 
 from firex.loaders.ceres_ebaf import load_ceres_ebaf
+from firex.loaders.modis_monthly import load_modis_monthly
 from firex.masks import build_mask
 from firex.regions import REGIONS
 
@@ -40,3 +41,26 @@ def test_ceres_ebaf_missing_variable_raises(fixtures_dir, tmp_path):
     src.to_netcdf(bad)
     with pytest.raises(KeyError, match="toa_sw_all_mon"):
         load_ceres_ebaf(bad, mask=_pnw_mask())
+
+
+def test_modis_terra_returns_dataset(fixtures_dir):
+    ds = load_modis_monthly(
+        [fixtures_dir / "modis_terra_synth.nc"], platform="terra", mask=_pnw_mask()
+    )
+    assert isinstance(ds, xr.Dataset)
+    assert "modis_terra_aod" in ds.data_vars
+    assert ds.dims == {"time": 24}
+
+
+def test_modis_aqua_returns_dataset(fixtures_dir):
+    ds = load_modis_monthly(
+        [fixtures_dir / "modis_aqua_synth.nc"], platform="aqua", mask=_pnw_mask()
+    )
+    assert "modis_aqua_aod" in ds.data_vars
+
+
+def test_modis_invalid_platform_raises(fixtures_dir):
+    with pytest.raises(ValueError, match="platform must be"):
+        load_modis_monthly(
+            [fixtures_dir / "modis_terra_synth.nc"], platform="other", mask=_pnw_mask()
+        )
