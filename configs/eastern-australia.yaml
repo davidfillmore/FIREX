@@ -1,0 +1,45 @@
+region: eastern-australia
+bbox:
+  lon_min: 140.0
+  lon_max: 154.0
+  lat_min: -44.0
+  lat_max: -25.0
+
+time:
+  start: "2000-03"
+  end: null
+
+paths:
+  ceres_ebaf: "~/Data/CERES_EBAF/ceres"
+  modis_terra: "~/Data/MOD08_M3"
+  modis_aqua: "~/Data/MYD08_M3"
+  viirs_snpp: "~/Data/VIIRS/AERDB_M3_VIIRS_SNPP"
+  viirs_noaa20: "~/Data/VIIRS/AERDB_M3_VIIRS_NOAA20"
+  merra2_aer: "~/Data/MERRA2_tavgM/aer_Nx"
+  merra2_slv: "~/Data/MERRA2_tavgM/slv_Nx"
+  qfed: "~/Data/QFED"
+  aeronet: "~/Data/AeroNet"
+
+output_dir: "output/eastern-australia"
+
+species_qfed: ["bc", "oc", "co"]
+peak_year: null
+
+regression:
+  predictors: ["smoke_aod_terra", "merra2_slv_TQV", "ceres_cloud_fraction"]
+  hac_lags: 6
+
+plots:
+  - aod_total_timeseries
+  - smoke_fraction_timeseries
+  - smoke_aod_timeseries
+  - ceres_toa_anomaly
+  - ceres_sfc_anomaly
+  - scatter_dF_TOA_vs_smoke
+  - scatter_dF_SFC_vs_smoke
+  - seasonal_climatology
+  - spatial_maps_peak_year
+  - qfed_emissions_timeseries
+  - aeronet_vs_modis_scatter
+  - cloud_fraction_timeseries
+  - merra2_obs_scaling

@@ -211,3 +211,6 @@ tests/fixtures/qfed_synth/
 output/pacific-northwest/data/
 output/pacific-northwest/logs/
 output/pacific-northwest/plots/
+output/eastern-australia/data/
+output/eastern-australia/logs/
+output/eastern-australia/plots/
