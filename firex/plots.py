@@ -234,17 +234,21 @@ def plot_scatter_dF_SFC_vs_smoke(ds, output) -> None:
 
 def plot_aeronet_vs_modis_scatter(ds, aeronet, output) -> None:
     fig, ax = plt.subplots(figsize=(6, 6))
-    if aeronet is not None and "aeronet_aod_550" in aeronet:
+    n_sites = aeronet.sizes.get("site", 0) if aeronet is not None else 0
+    if aeronet is not None and "aeronet_aod_550" in aeronet and n_sites > 0:
         for site in aeronet["site"].values:
             modis = ds["modis_terra_aod"].interp(time=aeronet["time"])
             site_aod = aeronet["aeronet_aod_550"].sel(site=site)
             ax.scatter(site_aod, modis, s=10, alpha=0.6, label=str(site))
         lim = max(np.nanmax(aeronet["aeronet_aod_550"].values), float(ds["modis_terra_aod"].max()))
         ax.plot([0, lim], [0, lim], "k--", lw=0.8)
+        ax.legend(fontsize=8)
+    else:
+        ax.text(0.5, 0.5, "no AERONET sites inside region bbox",
+                ha="center", va="center", transform=ax.transAxes, fontsize=11)
     ax.set_xlabel("AERONET AOD 550 nm")
     ax.set_ylabel("MODIS Terra gridcell AOD")
-    ax.set_title("AERONET vs. MODIS — PNW sites")
-    ax.legend(fontsize=8)
+    ax.set_title("AERONET vs. MODIS")
     _annotate_caption(fig, ds)
     save_figure(fig, output)
 
