@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
@@ -254,4 +256,47 @@ def plot_merra2_obs_scaling(ds, output) -> None:
     axes[1].set_ylabel("MERRA-2 / MODIS")
     axes[1].set_title("Scaling-factor time series")
     _annotate_caption(fig, ds, methods="ratio used to validate MERRA-2 fractional split, not magnitude")
+    save_figure(fig, output)
+
+
+def plot_spatial_maps_peak_year(
+    gridded: xr.Dataset,
+    peak_year: int,
+    region_bbox: tuple[float, float, float, float],
+    output,
+) -> None:
+    """2x2 cartopy grid: rows = climatology / peak-year anomaly, cols = smoke AOD / ΔF_TOA_SW_clr."""
+    smoke = gridded["smoke_aod_terra"]
+    dF = gridded["ceres_toa_sw_clr_anom"]
+
+    smoke_clim = smoke.mean("time")
+    dF_clim = dF.mean("time")
+    smoke_peak = smoke.sel(time=str(peak_year)).mean("time") - smoke_clim
+    dF_peak = dF.sel(time=str(peak_year)).mean("time") - dF_clim
+
+    fig = plt.figure(figsize=(11, 8))
+    panels = [
+        ("Climatology — smoke AOD", smoke_clim, "viridis", None),
+        ("Climatology — ΔF_TOA_SW_clr", dF_clim, "RdBu_r", (-5, 5)),
+        (f"{peak_year} anomaly — smoke AOD", smoke_peak, "viridis", None),
+        (f"{peak_year} anomaly — ΔF_TOA_SW_clr", dF_peak, "RdBu_r", (-10, 10)),
+    ]
+    for i, (title, data, cmap, vrange) in enumerate(panels, start=1):
+        ax = fig.add_subplot(2, 2, i, projection=ccrs.PlateCarree())
+        kwargs = {"cmap": cmap}
+        if vrange is not None:
+            kwargs["vmin"], kwargs["vmax"] = vrange
+        m = ax.pcolormesh(data["lon"], data["lat"], data, transform=ccrs.PlateCarree(), **kwargs)
+        ax.coastlines(lw=0.5)
+        ax.add_feature(cfeature.STATES.with_scale("50m"), lw=0.3)
+        lon_min, lon_max, lat_min, lat_max = region_bbox
+        ax.plot(
+            [lon_min, lon_max, lon_max, lon_min, lon_min],
+            [lat_min, lat_min, lat_max, lat_max, lat_min],
+            "k", lw=1.0, transform=ccrs.PlateCarree(),
+        )
+        ax.set_extent([lon_min - 5, lon_max + 5, lat_min - 5, lat_max + 5])
+        ax.set_title(title, fontsize=10)
+        plt.colorbar(m, ax=ax, shrink=0.7)
+    fig.suptitle(f"Spatial fields: climatology vs. {peak_year} anomaly")
     save_figure(fig, output)

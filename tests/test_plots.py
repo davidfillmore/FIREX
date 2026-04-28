@@ -25,6 +25,7 @@ from firex.plots import (
     plot_scatter_dF_SFC_vs_smoke,
     plot_aeronet_vs_modis_scatter,
     plot_merra2_obs_scaling,
+    plot_spatial_maps_peak_year,
 )
 
 
@@ -158,3 +159,22 @@ def test_plot_merra2_obs_scaling(tmp_path):
     ds = _synth_merged().assign(merra2_aer_TOTEXTTAU=("time", np.full(300, 0.18)))
     plot_merra2_obs_scaling(ds, tmp_path / "p13.png")
     assert (tmp_path / "p13.png").exists()
+
+
+def test_plot_spatial_maps(tmp_path):
+    setup_style()
+    times = pd.date_range("2000-03", periods=300, freq="MS")
+    lat = np.arange(40.5, 53)
+    lon = np.arange(-130.5, -109)
+    rng = np.random.default_rng(0)
+    shape = (times.size, lat.size, lon.size)
+    gridded = xr.Dataset(
+        {
+            "smoke_aod_terra": (("time", "lat", "lon"), 0.05 + 0.02 * rng.standard_normal(shape)),
+            "ceres_toa_sw_clr_anom": (("time", "lat", "lon"), 1.0 * rng.standard_normal(shape)),
+        },
+        coords={"time": times, "lat": lat, "lon": lon},
+    )
+    out = tmp_path / "p9.png"
+    plot_spatial_maps_peak_year(gridded, peak_year=2020, region_bbox=(-130, -110, 42, 52), output=out)
+    assert out.exists()
