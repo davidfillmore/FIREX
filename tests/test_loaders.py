@@ -5,6 +5,7 @@ import xarray as xr
 from firex.loaders.ceres_ebaf import load_ceres_ebaf
 from firex.loaders.modis_monthly import load_modis_monthly
 from firex.loaders.merra2_monthly import load_merra2_monthly
+from firex.loaders.qfed_monthly import load_qfed_monthly
 from firex.loaders.viirs_monthly import load_viirs_monthly
 from firex.masks import build_mask
 from firex.regions import REGIONS
@@ -104,3 +105,26 @@ def test_merra2_unknown_collection_raises(fixtures_dir):
         load_merra2_monthly(
             [fixtures_dir / "merra2_aer_synth.nc"], collection="bogus", mask=_pnw_mask()
         )
+
+
+def test_qfed_loads_monthly_species(fixtures_dir):
+    ds = load_qfed_monthly(
+        fixtures_dir / "qfed_synth", species=["bc", "oc", "co"], mask=_pnw_mask()
+    )
+    assert "qfed_bc" in ds.data_vars
+    assert "qfed_oc" in ds.data_vars
+    assert "qfed_co" in ds.data_vars
+    assert ds.dims["time"] == 1  # July 2020 only in fixture
+
+
+def test_qfed_skips_2016(tmp_path, fixtures_dir):
+    """Y2016 is on the deny-list per CLAUDE.md."""
+    base = tmp_path / "qfed"
+    src_dir = fixtures_dir / "qfed_synth" / "Y2020" / "M07"
+    dst_dir = base / "Y2016" / "M07"
+    dst_dir.mkdir(parents=True)
+    for f in src_dir.iterdir():
+        new_name = f.name.replace("20200", "20160")
+        (dst_dir / new_name).write_bytes(f.read_bytes())
+    ds = load_qfed_monthly(base, species=["bc"], mask=_pnw_mask())
+    assert ds.dims["time"] == 0
