@@ -4,6 +4,7 @@ import xarray as xr
 
 from firex.loaders.ceres_ebaf import load_ceres_ebaf
 from firex.loaders.modis_monthly import load_modis_monthly
+from firex.loaders.viirs_monthly import load_viirs_monthly
 from firex.masks import build_mask
 from firex.regions import REGIONS
 
@@ -64,3 +65,17 @@ def test_modis_invalid_platform_raises(fixtures_dir):
         load_modis_monthly(
             [fixtures_dir / "modis_terra_synth.nc"], platform="other", mask=_pnw_mask()
         )
+
+
+def test_viirs_snpp_returns_dataset(fixtures_dir):
+    ds = load_viirs_monthly(
+        [fixtures_dir / "viirs_snpp_synth.nc"], platform="snpp", mask=_pnw_mask()
+    )
+    assert "viirs_snpp_aod" in ds.data_vars
+
+
+def test_viirs_noaa20_returns_dataset(fixtures_dir):
+    ds = load_viirs_monthly(
+        [fixtures_dir / "viirs_noaa20_synth.nc"], platform="noaa20", mask=_pnw_mask()
+    )
+    assert "viirs_noaa20_aod" in ds.data_vars
