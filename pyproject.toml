@@ -1,0 +1,26 @@
+[project]
+name = "firex"
+version = "0.1.0"
+description = "Pacific Northwest wildfire-smoke radiative-effects pipeline"
+requires-python = ">=3.10"
+dependencies = [
+    "xarray",
+    "numpy",
+    "pandas",
+    "netCDF4",
+    "statsmodels",
+    "cartopy",
+    "matplotlib",
+    "pyyaml",
+    "davinci_monet",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.pytest.ini_options]
+markers = ["slow: end-to-end tests reading from ~/Data/"]
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+include = ["firex*"]
