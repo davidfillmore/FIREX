@@ -34,6 +34,11 @@ def load_ceres_ebaf(path: Path, mask: xr.Dataset) -> xr.Dataset:
     if missing:
         raise KeyError(f"CERES EBAF file missing variables: {missing}")
 
+    # CERES EBAF ships with lon ∈ [0, 360); the mask is on [-180, 180].
+    # Wrap to the same convention so the nearest-neighbor interp can match.
+    if float(src["lon"].max()) > 180:
+        src = src.assign_coords(lon=(((src["lon"] + 180) % 360) - 180)).sortby("lon")
+
     weight = mask["weight"].interp(
         lat=src["lat"], lon=src["lon"], method="nearest"
     ).fillna(0.0)

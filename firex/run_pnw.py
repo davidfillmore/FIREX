@@ -12,6 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pandas as pd
 import yaml
 import xarray as xr
 
@@ -74,6 +75,19 @@ def _stage1_mask(cfg: dict, out_dir: Path, force: bool) -> Path:
 
 def _glob_files(root: Path, pattern: str) -> list[Path]:
     return sorted(Path(root).expanduser().glob(pattern))
+
+
+def _to_month_start(ds: xr.Dataset) -> xr.Dataset:
+    """Snap the `time` coord to month-start so CERES (mid-month), MERRA-2
+    (mid-month + 30 min), and the satellite/QFED/AERONET (already month-start)
+    loaders share an aligned monthly axis. Drops duplicate months
+    (MODIS C6.1 occasionally has two granules for the same month, e.g.
+    reprocessed versions)."""
+    if "time" not in ds.coords:
+        return ds
+    t = pd.DatetimeIndex(ds["time"].values).to_period("M").to_timestamp()
+    ds = ds.assign_coords(time=t)
+    return ds.drop_duplicates("time", keep="first")
 
 
 def _stage2_loaders(cfg: dict, out_dir: Path, mask_path: Path, force: bool) -> dict[str, Path]:
@@ -161,12 +175,12 @@ def _stage3_attribution(stage2: dict[str, Path], out_dir: Path, force: bool) -> 
     if not force and output_is_fresh(out_path, inputs):
         logger.info("[stage 3] skipped (fresh)")
         return out_path
-    merra2 = xr.open_dataset(stage2["merra2_aer"]).load()
-    qfed = xr.open_dataset(stage2["qfed"]).load()
+    merra2 = _to_month_start(xr.open_dataset(stage2["merra2_aer"]).load())
+    qfed = _to_month_start(xr.open_dataset(stage2["qfed"]).load())
     obs: dict[str, xr.DataArray] = {}
     for k, var in [("modis_terra", "modis_terra_aod"), ("modis_aqua", "modis_aqua_aod"),
                    ("viirs_snpp", "viirs_snpp_aod"), ("viirs_noaa20", "viirs_noaa20_aod")]:
-        ds = xr.open_dataset(stage2[k]).load()
+        ds = _to_month_start(xr.open_dataset(stage2[k]).load())
         obs[var] = ds[var]
     atomic_to_netcdf(
         attribution.compute_smoke_attribution(merra2=merra2, obs=obs, qfed=qfed),
@@ -182,11 +196,12 @@ def _stage4_merge(stage2: dict[str, Path], stage3: Path, out_dir: Path, force: b
     if not force and output_is_fresh(out_path, inputs):
         logger.info("[stage 4] skipped (fresh)")
         return out_path
-    parts = [xr.open_dataset(p).load() for p in inputs if p is not None]
+    parts = [_to_month_start(xr.open_dataset(p).load()) for p in inputs if p is not None]
     merged = xr.merge(parts, compat="override")
-    # Append _anom columns
+    # Append _anom columns (only for vars with a `time` axis)
     for var in list(merged.data_vars):
-        merged[f"{var}_anom"] = anomaly.compute_anomaly(merged[var])
+        if "time" in merged[var].dims:
+            merged[f"{var}_anom"] = anomaly.compute_anomaly(merged[var])
     atomic_to_netcdf(merged, out_path)
     logger.info("[stage 4] wrote %s", out_path)
     return out_path
@@ -313,11 +328,19 @@ def main(argv: list[str] | None = None) -> int:
 
     stages = {int(s) for s in args.stages.split(",")}
     mask_path = _stage1_mask(cfg, out_dir, args.force) if 1 in stages else out_dir / "data" / "mask.nc"
-    stage2 = _stage2_loaders(cfg, out_dir, mask_path, args.force) if 2 in stages else {
-        k: out_dir / "data" / f"{k}.nc"
-        for k in ("ceres_ebaf", "modis_terra", "modis_aqua", "viirs_snpp",
-                  "viirs_noaa20", "merra2_aer", "merra2_slv", "qfed", "aeronet")
-    }
+    if 2 in stages:
+        stage2 = _stage2_loaders(cfg, out_dir, mask_path, args.force)
+    else:
+        # Resume mode: only include stage-2 outputs that actually exist on disk.
+        candidate_keys = ("ceres_ebaf", "modis_terra", "modis_aqua", "viirs_snpp",
+                          "viirs_noaa20", "merra2_aer", "merra2_slv", "qfed", "aeronet")
+        # Aeronet writes as `aeronet_pnw.nc`, not `aeronet.nc`.
+        stage2 = {}
+        for k in candidate_keys:
+            fname = "aeronet_pnw.nc" if k == "aeronet" else f"{k}.nc"
+            p = out_dir / "data" / fname
+            if p.exists():
+                stage2[k] = p
     stage3 = _stage3_attribution(stage2, out_dir, args.force) if 3 in stages else out_dir / "data" / "smoke_attribution.nc"
     merged = _stage4_merge(stage2, stage3, out_dir, args.force) if 4 in stages else out_dir / "data" / "merged.nc"
     if 5 in stages:
