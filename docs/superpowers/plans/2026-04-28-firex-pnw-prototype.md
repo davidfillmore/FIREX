@@ -11,7 +11,7 @@
 **Spec:** `docs/superpowers/specs/2026-04-28-firex-pnw-prototype-design.md`
 
 **Conventions in this plan:**
-- All `pytest` commands run from repo root (`~/EarthSystem/FIREX/`).
+- All `pytest` commands run from repo root (`~/FIREX/`).
 - All `git` commits use this format and never skip hooks:
   ```
   git commit -m "<short>" -m "<details, optional>"

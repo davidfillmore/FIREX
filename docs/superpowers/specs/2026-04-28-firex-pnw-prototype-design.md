@@ -17,7 +17,7 @@ End-to-end monthly time-series pipeline producing 13 figures for the **Pacific N
 - Both **clear-sky and all-sky** CERES quantities, carried in parallel.
 - Hybrid anomaly handling: plots show climatology-subtracted anomalies; regression uses raw values with month-of-year fixed effects + linear trend.
 - 13 plots (10 core + 3 optional).
-- Standard Python project layout in `~/EarthSystem/FIREX/`.
+- Standard Python project layout in `~/FIREX/`.
 
 **Out of scope (deferred to subsequent specs):**
 
@@ -36,7 +36,7 @@ End-to-end monthly time-series pipeline producing 13 figures for the **Pacific N
 
 ## Architecture
 
-### Repo layout (`~/EarthSystem/FIREX/`)
+### Repo layout (`~/FIREX/`)
 
 ```
 firex/                         # Python package
@@ -199,7 +199,7 @@ NCAR palette (obs gray, model blue, accents orange/aqua). Every caption includes
 
 - One per-run log file at `output/pacific-northwest/logs/run_{timestamp}.log` (Python `logging`, level `INFO`).
 - Stage start/end with elapsed seconds; per-loader input file count and time range; warnings on fallback paths (#2, #4, #7).
-- Header records git SHA of `~/EarthSystem/FIREX/`, `davinci_monet.__version__`, conda env name, resolved bbox, time slice.
+- Header records git SHA of `~/FIREX/`, `davinci_monet.__version__`, conda env name, resolved bbox, time slice.
 
 **Idempotency:**
 
@@ -247,4 +247,4 @@ NCAR palette (obs gray, model blue, accents orange/aqua). Every caption includes
 
 - [`FIREX.md`](../../../FIREX.md) — study methodology
 - [`CLAUDE.md`](../../../CLAUDE.md) — data staging and conventions
-- DAVINCI-MONET branch `ceres` — `davinci_monet/plots/{style,base}.py`, `davinci_monet/observations/surface/aeronet.py`, `analyses/ceres-smoke/configs/west-coast-2020-gemini.yaml` (prior daily-event prototype)
+- DAVINCI-MONET (at `~/DAVINCI/`) branch `ceres` — `davinci_monet/plots/{style,base}.py`, `davinci_monet/observations/surface/aeronet.py`, `analyses/ceres-smoke/configs/west-coast-2020-gemini.yaml` (prior daily-event prototype)

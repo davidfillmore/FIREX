@@ -18,6 +18,13 @@ Wildfire analysis with global atmospheric models and observational datasets.
   - Missing: dask, pyhdf, h5py, pyyaml, requests/httpx, zarr/fsspec, pytest. Surface install requests rather than silently `pip install`.
 - Source archives (NASA ASDC `/ASDC_archive/...`, NCCS portal, LAADS, FIRMS) are *source* paths for transfers — they are not mounted locally.
 
+## Related repos
+
+- **DAVINCI-MONET** (Python package `davinci_monet`, conda env `davinci-monet`, branch `ceres` for FIREX-related work) lives at different paths per machine:
+  - This Mac: `~/DAVINCI/`
+  - Other system: `~/EarthSystem/DAVINCI-MONET/`
+- Package name, env name, and branch name are machine-independent; only the filesystem path varies.
+
 ## Data staging
 
 - All transferred data lives at `~/Data/<DATASET>/...` — sibling to existing `AeroNet/`, `MATCH/`, `MERRA2_tavgM/`, `MODIS/`, etc.
