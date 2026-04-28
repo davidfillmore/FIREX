@@ -4,6 +4,7 @@ import xarray as xr
 
 from firex.loaders.ceres_ebaf import load_ceres_ebaf
 from firex.loaders.modis_monthly import load_modis_monthly
+from firex.loaders.merra2_monthly import load_merra2_monthly
 from firex.loaders.viirs_monthly import load_viirs_monthly
 from firex.masks import build_mask
 from firex.regions import REGIONS
@@ -79,3 +80,27 @@ def test_viirs_noaa20_returns_dataset(fixtures_dir):
         [fixtures_dir / "viirs_noaa20_synth.nc"], platform="noaa20", mask=_pnw_mask()
     )
     assert "viirs_noaa20_aod" in ds.data_vars
+
+
+def test_merra2_aer_loads_species(fixtures_dir):
+    ds = load_merra2_monthly(
+        [fixtures_dir / "merra2_aer_synth.nc"], collection="aer", mask=_pnw_mask()
+    )
+    assert "merra2_aer_TOTEXTTAU" in ds.data_vars
+    assert "merra2_aer_BCEXTTAU" in ds.data_vars
+    assert "merra2_aer_OCEXTTAU" in ds.data_vars
+
+
+def test_merra2_slv_loads_covariates(fixtures_dir):
+    ds = load_merra2_monthly(
+        [fixtures_dir / "merra2_slv_synth.nc"], collection="slv", mask=_pnw_mask()
+    )
+    assert "merra2_slv_T2M" in ds.data_vars
+    assert "merra2_slv_TQV" in ds.data_vars
+
+
+def test_merra2_unknown_collection_raises(fixtures_dir):
+    with pytest.raises(ValueError, match="Unknown collection"):
+        load_merra2_monthly(
+            [fixtures_dir / "merra2_aer_synth.nc"], collection="bogus", mask=_pnw_mask()
+        )
