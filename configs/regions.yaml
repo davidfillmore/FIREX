@@ -1,0 +1,65 @@
+regions:
+  Amazon:
+    lon_bounds:
+      - 290.0
+      - 310.0
+    lat_bounds:
+      - -10.0
+      - 5.0
+  Western_Sahara:
+    lon_bounds:
+      - 340.0
+      - 360.0
+    lat_bounds:
+      - 15.0
+      - 30.0
+  Eastern_Sahara:
+    lon_bounds:
+      - 0.0
+      - 25.0
+    lat_bounds:
+      - 15.0
+      - 30.0
+  Europe:
+    lon_bounds:
+      - 0.0
+      - 30.0
+    lat_bounds:
+      - 40.0
+      - 60.0
+  India:
+    lon_bounds:
+      - 70.0
+      - 85.0
+    lat_bounds:
+      - 10.0
+      - 30.0
+  China:
+    lon_bounds:
+      - 100.0
+      - 125.0
+    lat_bounds:
+      - 20.0
+      - 35.0
+  Australia:
+    lon_bounds:
+      - 115.0
+      - 150.0
+    lat_bounds:
+      - -35.0
+      - -15.0
+  Western_United_States:
+    lon_bounds:
+      - 235.0
+      - 260.0
+    lat_bounds:
+      - 30.0
+      - 50.0
+  Eastern_United_States:
+    lon_bounds:
+      - 260.0
+      - 285.0
+    lat_bounds:
+      - 30.0
+      - 50.0
+

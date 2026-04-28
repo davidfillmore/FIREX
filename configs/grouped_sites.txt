@@ -1,0 +1,74 @@
+North Africa
+Saada, Morocco, 31.6 N, 8.2 W, Jul 2004–Apr 2019
+Ouarzazate, Morocco, 30.9 N, 6.9 W, Feb 2012–Jun 2015
+Dakhla, Morocco, 23.7 N, 15.9 W, Feb 2002–Nov 2005
+Tamanrasset, Algeria, 22.8 N, 8.2 E, Jul 2004–Apr 2019
+Sal Island, Capo Verde, 16.7 N, 22.9 W, Mar 2000–Dec 2018
+
+Central Africa
+Ilorin, Nigeria, 8.5 N, 4.7 E, Mar 2000–Sep 2019
+Koforidua, Ghana, 6.1 N, 0.3 W, Dec 2012–Apr 2019
+Lope, Gabon, 0.2 S, 11.6 E, Apr 2014–Feb 2018
+Mbita, Kenya, 0.4 S, 34.2 E, Mar 2006–Jul 2017
+Bujumbura, Burundi, 3.4 S, 29.4 E, Dec 2013–Apr 2019
+
+China/Korea
+Xinglong, China, 40.4 N, 117.6 E, Feb 2006–Nov 2014
+Beijing, China, 39.9 N, 116.4 E, Mar 2001–Mar 2019
+Anmyon Island, South Korea, 36.5 N, 126.3 E, Mar 2000–Nov 2019
+Yonsei University, South Korea, 37.6 N, 126.9 E, Mar 2011–Jan 2019
+Cuiying Mountain, China, 35.9 N, 104.1 E Jul, 2006–May 2013
+Nanjing, China, 32.2 N, 118.7 E, Mar 2008–Apr 2010
+Taihu, China, 31.4 N, 120.2 E, Sep 2005–Aug 2016
+Xianghe, China, 39.7 N, 116.9 E, Mar 2001–May 2017
+
+India/Southeast Asia
+Gandhi College, India, 25.8 N, 84.1 E, Apr 2006–Nov 2019
+Luang Namtha, Laos, 20.9 N, 101.4 E, Apr 2001–Feb 2019
+Omkoi, Thailand, 17.8 N, 98.4 E, Feb 2003–Mar 2018
+Dhaka University, Bangladesh, 23.7 N, 90.3 E, Jun 2012–Jul 2019
+Bhola, Bangladesh, 22.2 N, 90.7 E, Apr 2013–Apr 2019
+Nghia Do, Vietnam, 21.0 N, 105.8 E, Nov 2010–Sep 2019
+Pune, India, 18.5 N, 73.8 E, Oct 2004–Jun 2019
+Hanimaadhoo, the Maldives, 6.7 N, 73.2 E, Nov 2004–Sep 2019
+
+Brazil
+Petrolina, Brazil, 9.1 S, 40.4 W, Jul 2004–Nov 2016
+Abracos Hill, Brazil, 10.7 S, 62.4 W, Mar 2000–Oct 2005
+Alta Floresta, Brazil, 9.9 S, 56.1 W, May 2000–Feb 2019
+Belterra, Brazil, 2.6 S, 55.0 W, Mar 2000–Apr 2005
+Ji Paraná SE, Brazil, 10.9 S, 61.9 W, Jan 2006–Oct 2017
+Manaus, Brazil, 2.9 S, 60.0 W Feb, 2011–May 2019
+Rio Branco, Brazil, 9.9 S, 67.9 W, Jul 2000–Oct 2017
+
+Australia
+Jabiru, Australia, 12.6 S, 132.9 E, Mar 2000–Sep 2019
+Lake Argyle, Australia, 16.1 S, 128.7 E, Oct 2001–Sep 2019
+Canberra, Australia, 35.3 S, 149.1 E, Jan 2003–Aug 2017
+Birdsville, Australia, 25.9 S, 139.3 E, Aug 2005–Jun 2018
+Lucinda, Australia, 18.5 S, 146.4 E, Oct 2009–Jan 2020
+Lake Lefroy, Australia 31.2 S, 121.7 E, Jun 2012–Dec 2019
+
+North America
+Brats Lake, Canada, 50.2 N, 104.7 W, Mar 2000–Feb 2013
+Sioux Falls, SD, 43.7 N, 96.6 W, Jun 2001–Oct 2017
+Ames, IA, 42.0 N, 93.8 W, May 2004–Mar 2019
+Boulder Tower, CO, 40.0 N, 105 W, May 2001–Jul 2016
+Bondville, IL, 40.0 N, 88.4 W Mar, 2000–Oct 2017
+Brookhaven, NY, 40.8 N, 72.9 W, Sep 2002–Jan 2020
+Wallops Island, VA, 37.9 N, 75.5 W, Mar 2003–Mar 2020
+ARM SGP E13, 36.6 N, 97.5 W, Mar 2000–May 2018
+Chesapeake Light Tower, , 36.9 N, 75.7 W, Mar 2000–Jan 2016
+Table Mountain, CO, 40.1 N, 105.2 W, Nov 2008–Dec 2017
+
+Europe
+Cabauw, Netherlands, 51.9 N, 4.9 E, Apr 2003–Nov 2017
+Palaiseau, France, 48.7 N, 2.2 E, Mar 2000–Oct 2020
+Tõrevere, Estonia, 58.2 N, 26.5 E, Jun 2002–Jul 2019
+Kishinev, Moldova, 47.0 N, 28.8 E, Mar 2000–Nov 2018
+Belsk, Poland, 51.8 N, 20.8 E, Jan 2004–Aug 2016
+Kyiv, Ukraine, 50.3 N, 30.5 E, Apr 2007–Dec 2018
+Hamburg, Germany, 53.5 N, 9.9 E, Jun 2000–Jun 2018
+Meteorological Inst. Univ. Munich, Germany, 48.1 N, 11.6 E, Nov 2001–May 2019
+Thessaloniki, Greece, 40.6 N, 22.1 E, Jun 2003–Mar 2020
+Bucharest, Hungary, 44.3 N, 26.0 E, Oct 2000–Mar 2019
