@@ -55,6 +55,7 @@ firex/                         # Python package
   regression.py                # OLS with month FE + trend; clear-sky and all-sky
   plots.py                     # 13 plot functions, all calling apply_ncar_style()
   cache.py                     # tidy-NetCDF read/write helpers
+  run_pnw.py                   # orchestrator (P2 stage runner; __main__-guarded)
 configs/
   pacific-northwest.yaml       # bbox, time slice, dataset paths, plot list
 output/pacific-northwest/
@@ -64,7 +65,6 @@ output/pacific-northwest/
   reports/                     # markdown methods/results draft
 scripts/
   fetch_*.sh                   # existing fetchers, untouched
-  run_pnw.py                   # orchestrator (P2 stage runner)
 tests/
   fixtures/                    # synthetic NetCDFs + a build helper
   test_masks.py
