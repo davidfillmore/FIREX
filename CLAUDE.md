@@ -2,6 +2,8 @@
 
 Wildfire analysis with global atmospheric models and observational datasets.
 
+**Study methodology:** see [`FIREX.md`](FIREX.md) — describes the science (regional radiative effects of wildfire smoke over the CERES record), dataset roles, smoke-AOD attribution approach, and intended analysis pipeline. This file (`CLAUDE.md`) covers data staging, fetchers, and conventions.
+
 ## Response style (for Claude)
 
 - Keep prompt responses minimal. No verbose framing or recap.
@@ -40,6 +42,43 @@ Wildfire analysis with global atmospheric models and observational datasets.
 | CERES EBAF Ed4.2.1 (TOA + Surface monthly) | `~/Data/CERES_EBAF/ceres/CERES_EBAF_Edition4.2.1_200003-202512.nc` | ASDC (`~/.netrc`) — `data.asdc.earthdata.nasa.gov/asdc-prod-protected/CERES/CERES_EBAF_Edition4.2.1/2000.03.01/` | Single global 1°×1° monthly file, 2000-03 → 2025-12 (310 months, 247 vars: 72 TOA + 144 SFC + 31 cloud/solar/aux), ~1.9 GiB. ASDC publishes one rolling granule (not month-by-month) so refresh = re-download the latest `Edition4.2.1_200003-{YYYYMM}.nc` from CMR. Ed4.2.1 supersedes Ed4.2 (Section 7 DQS fix); old `Edition4.2_200003-202407.nc` retired. No fetcher script — pulled manually with `curl --netrc -L -b ~/.urs_cookies -c ~/.urs_cookies`. |
 
 **Notable absence in ASDC:** no MOD14/MYD14 (active fire), no MCD64 (burned area). Pull from LAADS or FIRMS if needed.
+
+## Candidate datasets — smoke radiative-effects study
+
+Study scope: regional monthly time series, CERES record (2000-03 → present). Forcing-side AOD + emissions are covered by what's already staged; gaps are independent fire activity, smoke-vs-other-aerosol attribution, vertical structure, and surface validation.
+
+### Tier 1 — high priority
+
+- **GFED4.1s** (top priority) — Global Fire Emissions Database, 1997 → present, 0.25° monthly burned area + emissions for ~50 species incl. CO, BC, OC, PM2.5. Built from MCD64A1 burned area + MODIS active fire for small fires, scaled by emission factors. Canonical reference in the smoke-radiative-effects literature. Complements QFED (FRP-based) with a burned-area-based estimate — running both lets us bound emissions uncertainty.
+  - Source: `https://www.geo.vu.nl/~gwerf/GFED/GFED4/` (HDF5 monthly files, ~100 MB/yr) and mirror at `https://daac.ornl.gov/VEGETATION/guides/fire_emissions_v4.html` (NetCDF). Anonymous HTTP, no auth.
+  - GFED5 is in development but not yet published (as of 2026-04); track at `https://www.globalfiredata.org/`.
+- **MCD64A1** — MODIS Collection 6 burned area, 500 m monthly, 2000-11 → present. The observational basis under GFED. Independent of QFED's FRP approach.
+  - Source: LAADS coll **61**, product `MCD64A1`, MODIS sinusoidal tiles. Same bearer token as MOD08/MYD08.
+- **OMI / OMPS UV Aerosol Index (UVAI)** — best absorbing-smoke proxy; separates smoke from sulfate/dust in MODIS AOD. OMI: 2004 → present (row anomaly post-2007). OMPS: 2012 → present (continuity).
+  - OMI L3: GES DISC, `OMAERUVd` (daily 0.25°, with UVAI). Monthly means easy to compute from daily.
+  - OMPS aerosol: NASA Ozone SIPS — verify exact short-name (likely `OMPS-NPP_NMMIEAER` family) before fetching.
+  - Auth: same `~/.netrc` as MERRA-2 (GES DISC).
+- **MOPITT CO L3 monthly** — Terra MOPITT, 2000-03 → present, 1° monthly, total-column and profile CO. Long-record fire-transport tracer aligned exactly to the CERES record.
+  - Source: ASDC, `MOP03JM` (joint TIR/NIR monthly L3). Same `~/.netrc`.
+- **MERRA-2 monthly extras** — fetcher already supports this via `MERRA2_COLLECTIONS`. For regional analysis we want `slv` (single-level state — T2M, U10M, V10M, PBLH, TQV), `flx` (turbulent fluxes — HFLUX, EFLUX, USTAR), `lnd` (soil moisture, runoff, fire risk). Trivial to add.
+
+### Tier 2 — complementary
+
+- **MISR** — 2000-02 → present. (a) `MIL3MAEN` monthly L3 AOD at 0.5°, independent of MODIS. (b) MISR plume-height climatology (MINX-derived) for vertical placement of smoke. Source: ASDC.
+- **CALIPSO/CALIOP** — 2006-06 → 2023-08 (instrument shut down). Aerosol layer products `CAL_LID_L3_APro` for vertical aerosol distribution. Limited record but irreplaceable for the vertical question. Source: ASDC.
+- **MTBS** (Monitoring Trends in Burn Severity) — U.S. fire perimeters and burn severity since 1984. Useful regional fire mask if focusing on Pacific NW / California. Shapefiles, no auth. `https://mtbs.gov/`.
+- **SURFRAD** — NOAA 7-site network of 1-min surface SW/LW broadband, 1995 → present. Direct ground truth for CERES SFC SW↓/LW↓. Pacific NW site: Sioux Falls SD is closest; western U.S. site: Desert Rock NV, Boulder CO. `https://gml.noaa.gov/grad/surfrad/`.
+
+### Tier 3 — case-by-case
+
+- **ESA Fire_cci** — independent ESA burned-area record, cross-validation against MCD64/GFED.
+- **GBBEPx** (NOAA) — alternative emissions inventory for QFED sensitivity tests.
+- **NOAA HMS smoke polygons** — daily analyst-drawn smoke plumes; useful for smoke-day classification when compositing CERES anomalies.
+- **AirNow / EPA AQS PM2.5** — surface health impact; out of scope unless we extend the study.
+
+### Already staged but worth flagging for this study
+
+- **AERONET** at `~/Data/AeroNet/` — 300 monthly NetCDF files (2000-01 → 2024-12), multi-wavelength AOD per site, sub-daily samples. Surface AOD validation against MODIS/VIIRS column AOD; SSA at AERONET inversion sites also available. For Pacific NW: Trinidad Head, BSRN_BAO_Boulder, Bondville, Railroad_Valley are nearby. Last refresh: 2025-07-28.
 
 ## Auth
 
