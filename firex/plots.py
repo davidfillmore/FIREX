@@ -417,6 +417,67 @@ def _plot_aod_sw_pair(ds: xr.Dataset, kind: str, output, sky: str = "clr") -> No
     save_figure(fig, output)
 
 
+def plot_qfed_vs_smoke_aod_scatter(ds: xr.Dataset, output) -> None:
+    """Monthly scatter of QFED OC emission flux vs ensemble-mean smoke AOD.
+
+    Uses black dots/line (instead of the NCAR palette) and labels the
+    same top-N peak smoke months as the timeseries plots.
+    """
+    smoke_cols = [c for c in
+                  ("smoke_aod_terra","smoke_aod_aqua",
+                   "smoke_aod_snpp","smoke_aod_noaa20") if c in ds]
+    if "qfed_oc" not in ds or not smoke_cols:
+        return
+    smoke = xr.concat([ds[c] for c in smoke_cols], dim="src").mean("src")
+    times = pd.DatetimeIndex(smoke["time"].values)
+    x_all = ds["qfed_oc"].values.astype(float)
+    y_all = smoke.values.astype(float)
+    valid = np.isfinite(x_all) & np.isfinite(y_all)
+    x, y = x_all[valid], y_all[valid]
+
+    fig, ax = plt.subplots(figsize=(7, 6))
+    ax.scatter(x, y, s=14, alpha=0.55, color="black", zorder=2)
+    if x.size >= 3 and x.var() > 0:
+        slope, intercept = np.polyfit(x, y, 1)
+        yhat = slope * x + intercept
+        resid = y - yhat
+        sxx = ((x - x.mean()) ** 2).sum()
+        se = float(np.sqrt((resid ** 2).sum() / (x.size - 2) / sxx))
+        r2 = float(1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum())
+        xs = np.linspace(0, x.max(), 100)
+        ax.plot(xs, slope * xs + intercept, color="black", lw=1.4, zorder=3)
+        ax.text(
+            0.05, 0.95,
+            f"β = {slope:.2e} ± {se:.2e}\nn = {x.size}\nR² = {r2:.2f}",
+            transform=ax.transAxes, va="top", fontsize=10,
+            bbox=dict(facecolor="white", alpha=0.85, edgecolor="none"),
+        )
+
+    # Mark + label the same peak months as the timeseries plots (top-N
+    # smoke-AOD ensemble means; N=5 for EAU, 4 elsewhere).
+    top_n = 5 if ds.attrs.get("region") == "eastern-australia" else 4
+    peaks = (
+        pd.DataFrame({"time": times, "qfed": x_all, "smoke": y_all})
+        .dropna(subset=["smoke"])
+        .nlargest(top_n, "smoke")
+        .sort_values("time")
+    )
+    if not peaks.empty:
+        for _, row in peaks.iterrows():
+            label = pd.Timestamp(row.time).strftime("%b %Y")
+            ax.annotate(
+                label, xy=(row.qfed, row.smoke),
+                xytext=(7, 0), textcoords="offset points",
+                ha="left", va="center", fontsize=9, color="black", zorder=6,
+            )
+
+    ax.set_xlabel("QFED OC (kg m⁻² s⁻¹)")
+    ax.set_ylabel("Smoke AOD 550 nm (Ensemble Mean)")
+    ax.set_title(f"QFED OC vs Smoke AOD — {_region_label(ds)}")
+    fig.tight_layout()
+    save_figure(fig, output)
+
+
 def plot_qfed_smoke_aod(ds: xr.Dataset, output) -> None:
     """2-panel: QFED OC + BC (twinx) on top; total AOD + smoke AOD spreads below."""
     fig, axes = plt.subplots(

@@ -111,6 +111,7 @@ to each filename. Slugs (PNG + PDF for each region):
 - `aod_sfc`, `aod_sfc_all`
 - `aod_toa`, `aod_toa_all`
 - `qfed_smoke_aod`
+- `qfed_vs_smoke_aod_scatter`
 
 After regenerating any of these, run:
 
