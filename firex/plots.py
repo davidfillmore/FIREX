@@ -287,15 +287,18 @@ def _three_panel_anomaly(ds, prefix: str, label: str, output) -> None:
     save_figure(fig, output)
 
 
-def _plot_aod_sw_pair(ds: xr.Dataset, kind: str, output) -> None:
-    """2-panel: total AOD on top; SW clear-sky anomaly + smoke AOD (twinx) below."""
+def _plot_aod_sw_pair(ds: xr.Dataset, kind: str, output, sky: str = "clr") -> None:
+    """2-panel: total AOD on top; SW (clear- or all-sky) anomaly + smoke AOD (twinx) below."""
+    if sky not in ("clr", "all"):
+        raise ValueError(f"sky must be 'clr' or 'all', got {sky!r}")
+    sky_label = "Clear-Sky" if sky == "clr" else "All-Sky"
     if kind == "sfc":
-        clr_var = "ceres_sfc_sw_down_clr_anom"
-        ylabel_anom = "ΔF$_{SFC,SW↓}$ Clear-Sky (W m⁻²)"
+        clr_var = f"ceres_sfc_sw_down_{sky}_anom"
+        ylabel_anom = f"ΔF$_{{SFC,SW↓}}$ {sky_label} (W m⁻²)"
         title_tag = "Surface"
     elif kind == "toa":
-        clr_var = "ceres_toa_sw_clr_anom"
-        ylabel_anom = "ΔF$_{TOA,SW}$ Clear-Sky (W m⁻²)"
+        clr_var = f"ceres_toa_sw_{sky}_anom"
+        ylabel_anom = f"ΔF$_{{TOA,SW}}$ {sky_label} (W m⁻²)"
         title_tag = "TOA"
     else:
         raise ValueError(f"kind must be 'sfc' or 'toa', got {kind!r}")
@@ -336,7 +339,7 @@ def _plot_aod_sw_pair(ds: xr.Dataset, kind: str, output) -> None:
                            pos_color, neg_color)
         line_anom, = ax_a.plot(ds["time"], ds[clr_var], lw=1.2,
                                color=NCAR_COLORS["red"], zorder=3,
-                               label="ΔF Clear-Sky")
+                               label=f"ΔF {sky_label}")
     ax_a.set_ylabel(ylabel_anom)
     if kind == "sfc":
         # Invert so dimming (negative ΔF) reads "up" — visually aligns with
@@ -409,17 +412,77 @@ def _plot_aod_sw_pair(ds: xr.Dataset, kind: str, output) -> None:
 
     axes[-1].set_xlabel("Year")
     _apply_date_range(axes[-1])
-    fig.suptitle(f"AOD and CERES SW {title_tag} Clear-Sky Anomaly — {_region_label(ds)}")
+    fig.suptitle(f"AOD and CERES SW {title_tag} {sky_label} Anomaly — {_region_label(ds)}")
+    fig.tight_layout()
+    save_figure(fig, output)
+
+
+def plot_qfed_smoke_aod(ds: xr.Dataset, output) -> None:
+    """2-panel: QFED OC + BC (twinx) on top; total AOD + smoke AOD spreads below."""
+    fig, axes = plt.subplots(
+        2, 1, figsize=(11, 8), sharex=True,
+        gridspec_kw={"height_ratios": [1, 1.3]},
+    )
+
+    # Top: QFED OC. (BC is omitted because QFED's biome-fixed emission
+    # factors yield a near-constant OC/BC ratio — BC plots on top of OC
+    # under any dual-axis scaling and adds no information.)
+    ax_oc = axes[0]
+    oc_color = NCAR_COLORS["orange"]
+    if "qfed_oc" in ds:
+        _plot_annual_bars(ax_oc, ds["qfed_oc"], oc_color)
+        ax_oc.plot(ds["time"], ds["qfed_oc"], lw=1.2, color=oc_color,
+                   label="QFED OC", zorder=2)
+    ax_oc.set_ylabel("QFED OC (kg m⁻² s⁻¹)")
+    ax_oc.legend(fontsize=9, loc="upper left")
+
+    # Bottom: total AOD ensemble + spread, smoke AOD ensemble + spread.
+    ax = axes[1]
+    total_cols = [c for c in
+                  ("modis_terra_aod","modis_aqua_aod","viirs_snpp_aod",
+                   "viirs_noaa20_aod","merra2_aer_TOTEXTTAU") if c in ds]
+    if total_cols:
+        total = xr.concat([ds[c] for c in total_cols], dim="src")
+        ax.fill_between(ds["time"], total.min("src"), total.max("src"),
+                        color=NCAR_COLORS["aqua"], alpha=0.25, zorder=1,
+                        label="Total AOD Spread")
+        ax.plot(ds["time"], total.mean("src"), lw=1.4,
+                color=NCAR_COLORS["ncar_blue"], zorder=3,
+                label="Total AOD Ensemble")
+    smoke_cols = [c for c in
+                  ("smoke_aod_terra","smoke_aod_aqua",
+                   "smoke_aod_snpp","smoke_aod_noaa20") if c in ds]
+    if smoke_cols:
+        smoke = xr.concat([ds[c] for c in smoke_cols], dim="src")
+        ax.fill_between(ds["time"], smoke.min("src"), smoke.max("src"),
+                        color="0.65", alpha=0.4, zorder=2,
+                        label="Smoke AOD Spread")
+        ax.plot(ds["time"], smoke.mean("src"), lw=1.4, color="black",
+                zorder=4, label="Smoke AOD Ensemble")
+    ax.set_ylabel("AOD 550 nm")
+    ax.legend(fontsize=9, loc="upper left", ncol=2)
+    ax.set_xlabel("Year")
+    _apply_date_range(ax)
+
+    fig.suptitle(f"QFED Emissions and Total / Smoke AOD — {_region_label(ds)}")
     fig.tight_layout()
     save_figure(fig, output)
 
 
 def plot_aod_sfc(ds: xr.Dataset, output) -> None:
-    _plot_aod_sw_pair(ds, kind="sfc", output=output)
+    _plot_aod_sw_pair(ds, kind="sfc", output=output, sky="clr")
 
 
 def plot_aod_toa(ds: xr.Dataset, output) -> None:
-    _plot_aod_sw_pair(ds, kind="toa", output=output)
+    _plot_aod_sw_pair(ds, kind="toa", output=output, sky="clr")
+
+
+def plot_aod_sfc_all(ds: xr.Dataset, output) -> None:
+    _plot_aod_sw_pair(ds, kind="sfc", output=output, sky="all")
+
+
+def plot_aod_toa_all(ds: xr.Dataset, output) -> None:
+    _plot_aod_sw_pair(ds, kind="toa", output=output, sky="all")
 
 
 def plot_ceres_toa_anomaly(ds: xr.Dataset, output) -> None:

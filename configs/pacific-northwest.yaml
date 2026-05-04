@@ -33,6 +33,9 @@ plots:
   - aod_total_timeseries
   - aod_sfc
   - aod_toa
+  - aod_sfc_all
+  - aod_toa_all
+  - qfed_smoke_aod
   - smoke_fraction_timeseries
   - smoke_aod_timeseries
   - ceres_toa_anomaly

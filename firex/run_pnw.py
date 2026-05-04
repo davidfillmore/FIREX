@@ -304,6 +304,12 @@ def _stage6_plots(cfg: dict, merged_path: Path, out_dir: Path, force: bool) -> N
             lambda: plots.plot_aod_sfc(merged, plots_dir / "aod_sfc.png"),
         "aod_toa":
             lambda: plots.plot_aod_toa(merged, plots_dir / "aod_toa.png"),
+        "aod_sfc_all":
+            lambda: plots.plot_aod_sfc_all(merged, plots_dir / "aod_sfc_all.png"),
+        "aod_toa_all":
+            lambda: plots.plot_aod_toa_all(merged, plots_dir / "aod_toa_all.png"),
+        "qfed_smoke_aod":
+            lambda: plots.plot_qfed_smoke_aod(merged, plots_dir / "qfed_smoke_aod.png"),
         "smoke_fraction_timeseries":
             lambda: plots.plot_smoke_fraction_timeseries(merged, plots_dir / "smoke_fraction_timeseries.png"),
         "smoke_aod_timeseries":
