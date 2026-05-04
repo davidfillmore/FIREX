@@ -1,4 +1,21 @@
-"""Compute smoke-fraction and smoke-AOD per observed source."""
+"""Compute smoke-fraction and smoke-AOD per observed source.
+
+MERRA-2 aer_Nx exposes only species totals (BCEXTTAU, OCEXTTAU, ...) — no
+biomass-burning split. We approximate the smoke contribution to BC and OC
+by subtracting a per-month-of-year background climatology (the 10th
+percentile across the record), which captures non-fire anthropogenic +
+biogenic levels in each season:
+
+    smoke_BC[t] = max(0, BCEXTTAU[t] − BCEXTTAU_bg[month_of(t)])
+    smoke_OC[t] = max(0, OCEXTTAU[t] − OCEXTTAU_bg[month_of(t)])
+    smoke_AOD_merra2[t] = smoke_BC[t] + smoke_OC[t]
+    smoke_fraction[t] = smoke_AOD_merra2[t] / TOTEXTTAU[t]
+
+The 10th-percentile baseline assumes that for any calendar month the record
+contains at least a few clean (no-fire) realizations. With ~26 years of data
+this puts the baseline at roughly the 3rd-lowest year per month — robust to
+elevated fire years while staying dimensionally honest (AOD minus AOD).
+"""
 from __future__ import annotations
 
 import logging
@@ -14,14 +31,17 @@ _OBS_TO_SLUG = {
     "viirs_noaa20_aod": "noaa20",
 }
 
+_BASELINE_PERCENTILE = 0.10
 
-def _djf_baseline_oc(merra2: xr.Dataset) -> float:
-    """Per-record DJF mean of OCEXTTAU as anthropogenic+biogenic baseline."""
-    oc = merra2["merra2_aer_OCEXTTAU"]
-    djf = oc.where(oc["time"].dt.month.isin([12, 1, 2]), drop=True)
-    if djf.size == 0:
-        raise ValueError("No DJF months available for fallback baseline")
-    return float(djf.mean().item())
+
+def _per_month_baseline(da: xr.DataArray, q: float = _BASELINE_PERCENTILE) -> xr.DataArray:
+    """Per-month-of-year low-percentile baseline (broadcast back along time).
+
+    Returns a DataArray on the same time axis as *da*, with each timestep
+    replaced by its calendar-month baseline value.
+    """
+    by_month = da.groupby("time.month").quantile(q, dim="time")
+    return by_month.sel(month=da["time.month"]).drop_vars(("month", "quantile"))
 
 
 def compute_smoke_attribution(
@@ -30,27 +50,38 @@ def compute_smoke_attribution(
     obs: dict[str, xr.DataArray],
     qfed: xr.Dataset,
 ) -> xr.Dataset:
-    """Smoke fraction (MERRA-2-based) and smoke AOD per observation source."""
+    """Smoke fraction (MERRA-2-based) and smoke AOD per observation source.
+
+    Parameters
+    ----------
+    merra2
+        Region-averaged MERRA-2 aer monthly dataset; required vars are
+        ``merra2_aer_BCEXTTAU``, ``merra2_aer_OCEXTTAU``, ``merra2_aer_TOTEXTTAU``.
+    obs
+        Mapping of observation-AOD variables (`modis_terra_aod`,
+        `modis_aqua_aod`, `viirs_snpp_aod`, `viirs_noaa20_aod`) to their
+        DataArrays.
+    qfed
+        Region-averaged QFED dataset (carried for provenance only — not
+        used in the baseline-subtraction method).
+    """
     bc = merra2["merra2_aer_BCEXTTAU"]
     oc = merra2["merra2_aer_OCEXTTAU"]
     total = merra2["merra2_aer_TOTEXTTAU"]
 
-    if "merra2_aer_OCEXTTAU_bb" in merra2:
-        oc_bb = merra2["merra2_aer_OCEXTTAU_bb"]
-        oc_split_method = "explicit"
-    else:
-        baseline = _djf_baseline_oc(merra2)
-        share = qfed["qfed_oc"] / (qfed["qfed_oc"] + baseline)
-        oc_bb = oc * share.clip(0.0, 1.0)
-        oc_split_method = "fallback"
-        logger.warning(
-            "MERRA-2 lacks OCEXTTAU_bb; using QFED-ratio fallback with DJF baseline %.3e",
-            baseline,
-        )
+    bc_bg = _per_month_baseline(bc)
+    oc_bg = _per_month_baseline(oc)
+    smoke_bc = (bc - bc_bg).clip(min=0.0)
+    smoke_oc = (oc - oc_bg).clip(min=0.0)
+    smoke_aod_merra2 = smoke_bc + smoke_oc
+    smoke_fraction = (smoke_aod_merra2 / total).clip(0.0, 1.0)
 
-    smoke_fraction = ((bc + oc_bb) / total).clip(0.0, 1.0)
-
-    out_vars: dict[str, xr.DataArray] = {"smoke_fraction": smoke_fraction}
+    out_vars: dict[str, xr.DataArray] = {
+        "smoke_fraction": smoke_fraction,
+        "smoke_aod_merra2": smoke_aod_merra2,
+        "merra2_bc_baseline": bc_bg,
+        "merra2_oc_baseline": oc_bg,
+    }
     for obs_name, obs_da in obs.items():
         if obs_name not in _OBS_TO_SLUG:
             raise KeyError(f"Unknown observation source: {obs_name}")
@@ -58,5 +89,5 @@ def compute_smoke_attribution(
         out_vars[f"smoke_aod_{slug}"] = smoke_fraction * obs_da
 
     ds = xr.Dataset(out_vars)
-    ds.attrs["oc_split_method"] = oc_split_method
+    ds.attrs["oc_split_method"] = f"baseline_subtraction_q{_BASELINE_PERCENTILE:.2f}"
     return ds
