@@ -5,14 +5,44 @@ holds the shared style hook and `save_figure` helper.
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import xarray as xr
-from davinci_monet.plots.style import apply_ncar_style
+
+# DAVINCI-MONET lives outside the sarb env on this Mac. Path differs by host.
+for _cand in (Path.home() / "DAVINCI", Path.home() / "EarthSystem" / "DAVINCI-MONET"):
+    if (_cand / "davinci_monet" / "__init__.py").is_file():
+        sys.path.insert(0, str(_cand))
+        break
+from davinci_monet.plots.style import NCAR_COLORS, apply_ncar_style  # noqa: E402
+
+
+# Study window: CERES record start (Mar 2000) through Feb 2026 = 26 full years.
+DATE_MIN = pd.Timestamp("2000-03-01")
+DATE_MAX = pd.Timestamp("2026-03-01")  # right edge, exclusive — Feb 2026 sits inside
+DATE_LABEL = ("2000-03", "2026-02")
+
+
+def _apply_date_range(ax) -> None:
+    """Clamp time-axis to 2000-03..2026-02 with one tick per year, slanted.
+
+    Ticks are placed at mid-year (Jul 1) so each label sits centered under
+    the year's data span, rather than at the Jan-1 boundary between years.
+    """
+    import matplotlib.dates as mdates
+    ax.set_xlim(DATE_MIN, DATE_MAX)
+    ax.xaxis.set_major_locator(mdates.MonthLocator(bymonth=7))
+    ax.xaxis.set_minor_locator(mdates.YearLocator())  # faint Jan-1 ticks
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+    for label in ax.get_xticklabels():
+        label.set_rotation(45)
+        label.set_ha("center")
 
 
 _STYLE_APPLIED = False
@@ -45,47 +75,107 @@ def save_figure(fig, path: Path) -> None:
     plt.close(fig)
 
 
+def _annual_mean_complete(da: xr.DataArray) -> xr.DataArray:
+    """Annual means, restricted to years with all 12 months present."""
+    counts = da.groupby("time.year").count()
+    means = da.groupby("time.year").mean()
+    return means.where(counts == 12, drop=True)
+
+
+def _plot_annual_bars(
+    ax, da: xr.DataArray, color: str, y_floor: float | None = None,
+) -> float:
+    """Faint wide bars at the annual mean for each complete year.
+
+    Returns the y_floor used, so callers can share an anchor across series
+    plotted on the same axis.
+    """
+    annual = _annual_mean_complete(da)
+    if annual.size == 0:
+        return float("nan") if y_floor is None else y_floor
+    if y_floor is None:
+        lo = float(annual.min())
+        hi = float(annual.max())
+        pad = 0.05 * (hi - lo) if hi > lo else 0.0
+        y_floor = lo - pad
+    bar_dates = pd.to_datetime([f"{int(y)}-07-01" for y in annual.year.values])
+    ax.bar(
+        bar_dates,
+        annual.values - y_floor,
+        bottom=y_floor,
+        width=np.timedelta64(300, "D"),
+        color=color,
+        alpha=0.15,
+        zorder=1,
+    )
+    return y_floor
+
+
+def _plot_anomaly_fill(
+    ax, time, values, pos_color: str, neg_color: str,
+) -> None:
+    """Shade between zero and *values*: pos_color above, neg_color below."""
+    values = np.asarray(values, dtype=float)
+    ax.axhline(0, color=NCAR_COLORS["gray"], lw=0.8, zorder=1)
+    ax.fill_between(
+        time, 0, values, where=values >= 0,
+        color=pos_color, alpha=0.2, zorder=1, interpolate=True,
+    )
+    ax.fill_between(
+        time, 0, values, where=values < 0,
+        color=neg_color, alpha=0.2, zorder=1, interpolate=True,
+    )
+
+
+def _region_label(ds: xr.Dataset) -> str:
+    """Humanize the region slug stored in ds.attrs (e.g. eastern-australia → Eastern Australia)."""
+    raw = ds.attrs.get("region", "")
+    return raw.replace("-", " ").title() if raw else "?"
+
+
 def _annotate_caption(fig, ds: xr.Dataset, methods: str = "") -> None:
-    region = ds.attrs.get("region", "?")
-    bbox = ds.attrs.get("bbox", "")
-    t0 = str(xr.DataArray(ds["time"].values[0]).dt.strftime("%Y-%m").item())
-    t1 = str(xr.DataArray(ds["time"].values[-1]).dt.strftime("%Y-%m").item())
-    caption = f"region={region} {bbox} | {t0}–{t1}"
-    if methods:
-        caption += f" | {methods}"
-    fig.text(0.5, -0.02, caption, ha="center", fontsize=8)
+    """Footer was redundant with title + axes; keep tight_layout only."""
+    fig.tight_layout()
 
 
 def plot_aod_total_timeseries(ds: xr.Dataset, aeronet, output) -> None:
     fig, ax = plt.subplots(figsize=(10, 4))
-    for var, label in [
-        ("modis_terra_aod", "MODIS Terra"),
-        ("modis_aqua_aod", "MODIS Aqua"),
-        ("viirs_snpp_aod", "VIIRS-SNPP"),
-        ("viirs_noaa20_aod", "VIIRS-NOAA20"),
-    ]:
-        if var in ds:
-            ax.plot(ds["time"], ds[var], label=label, lw=1.0)
+    series = [
+        ("modis_terra_aod", "MODIS Terra", NCAR_COLORS["ncar_blue"]),
+        ("modis_aqua_aod", "MODIS Aqua", NCAR_COLORS["aqua"]),
+        ("viirs_snpp_aod", "VIIRS-SNPP", NCAR_COLORS["orange"]),
+        ("viirs_noaa20_aod", "VIIRS-NOAA20", NCAR_COLORS["purple"]),
+    ]
+    present = [(v, lbl, c) for v, lbl, c in series if v in ds]
+    if present:
+        ensemble = xr.concat([ds[v] for v, _, _ in present], dim="src").mean("src")
+        _plot_annual_bars(ax, ensemble, NCAR_COLORS["gray"])
+        for var, label, color in present:
+            ax.plot(ds["time"], ds[var], label=label, lw=1.2, color=color, zorder=2)
     if aeronet is not None and "aeronet_aod_550" in aeronet:
         for site in aeronet["site"].values:
             ax.scatter(
                 aeronet["time"], aeronet["aeronet_aod_550"].sel(site=site),
-                s=8, alpha=0.6, label=f"AERONET {site}",
+                s=8, alpha=0.6, label=f"AERONET {site}", zorder=3,
             )
     ax.set_xlabel("Year")
     ax.set_ylabel("AOD 550 nm")
-    ax.set_title("Total AOD — Pacific Northwest monthly")
+    ax.set_title(f"Total AOD — {_region_label(ds)} monthly")
     ax.legend(fontsize=8, loc="upper left")
+    _apply_date_range(ax)
     _annotate_caption(fig, ds)
     save_figure(fig, output)
 
 
 def plot_smoke_fraction_timeseries(ds: xr.Dataset, output) -> None:
     fig, ax = plt.subplots(figsize=(10, 3.5))
-    ax.plot(ds["time"], ds["smoke_fraction"], lw=1.0)
+    color = NCAR_COLORS["ncar_blue"]
+    _plot_annual_bars(ax, ds["smoke_fraction"], color)
+    ax.plot(ds["time"], ds["smoke_fraction"], lw=1.2, color=color, zorder=2)
     ax.set_xlabel("Year")
     ax.set_ylabel("Smoke fraction (–)")
-    ax.set_title("MERRA-2-derived smoke fraction — Pacific Northwest")
+    ax.set_title(f"MERRA-2-derived smoke fraction — {_region_label(ds)}")
+    _apply_date_range(ax)
     _annotate_caption(fig, ds, methods="smoke_fraction = (BC + OC_bb) / TOTAL")
     save_figure(fig, output)
 
@@ -94,18 +184,30 @@ def plot_smoke_aod_timeseries(ds: xr.Dataset, output) -> None:
     fig, ax = plt.subplots(figsize=(10, 3.5))
     cols = ["smoke_aod_terra", "smoke_aod_aqua", "smoke_aod_snpp", "smoke_aod_noaa20"]
     arr = xr.concat([ds[c] for c in cols if c in ds], dim="src")
-    ax.fill_between(ds["time"], arr.min("src"), arr.max("src"), alpha=0.3, label="inter-platform spread")
-    ax.plot(ds["time"], arr.mean("src"), lw=1.0, label="ensemble mean")
+    mean = arr.mean("src")
+    color = NCAR_COLORS["ncar_blue"]
+    spread_color = NCAR_COLORS["aqua"]
+    _plot_annual_bars(ax, mean, color)
+    ax.fill_between(
+        ds["time"], arr.min("src"), arr.max("src"),
+        color=spread_color, alpha=0.3, label="inter-platform spread", zorder=2,
+    )
+    ax.plot(ds["time"], mean, lw=1.2, color=color, label="ensemble mean", zorder=3)
     ax.set_xlabel("Year")
     ax.set_ylabel("Smoke AOD 550 nm")
-    ax.set_title("Smoke AOD — Pacific Northwest monthly")
+    ax.set_title(f"Smoke AOD — {_region_label(ds)} monthly")
     ax.legend(fontsize=9)
+    _apply_date_range(ax)
     _annotate_caption(fig, ds, methods="smoke_AOD = smoke_fraction × observed AOD")
     save_figure(fig, output)
 
 
 def _three_panel_anomaly(ds, prefix: str, label: str, output) -> None:
     fig, axes = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
+    pos_color = NCAR_COLORS["orange"]
+    neg_color = NCAR_COLORS["ncar_blue"]
+    all_color = NCAR_COLORS["gray"]
+    clr_color = NCAR_COLORS["red"]
     for ax, comp, ylabel in zip(
         axes, ("sw", "lw", "net"),
         (f"{label} SW anomaly (W m⁻²)", f"{label} LW anomaly (W m⁻²)", f"{label} Net anomaly (W m⁻²)"),
@@ -116,14 +218,16 @@ def _three_panel_anomaly(ds, prefix: str, label: str, output) -> None:
         if "sfc" in prefix and comp == "net":
             all_var = f"{prefix}_net_all_anom"
             clr_var = f"{prefix}_net_clr_anom"
-        if all_var in ds:
-            ax.plot(ds["time"], ds[all_var], label="all-sky", lw=1.0)
         if clr_var in ds:
-            ax.plot(ds["time"], ds[clr_var], label="clear-sky", lw=1.0)
+            _plot_anomaly_fill(ax, ds["time"].values, ds[clr_var].values, pos_color, neg_color)
+            ax.plot(ds["time"], ds[clr_var], label="clear-sky", lw=1.2, color=clr_color, zorder=3)
+        if all_var in ds:
+            ax.plot(ds["time"], ds[all_var], label="all-sky", lw=0.8, color=all_color, alpha=0.8, zorder=2)
         ax.set_ylabel(ylabel)
         ax.legend(fontsize=9)
     axes[-1].set_xlabel("Year")
-    fig.suptitle(f"CERES {label} radiative-flux anomalies — Pacific Northwest")
+    _apply_date_range(axes[-1])
+    fig.suptitle(f"CERES {label} radiative-flux anomalies — {_region_label(ds)}")
     _annotate_caption(fig, ds, methods="anomaly = monthly value − month-of-year climatology")
     save_figure(fig, output)
 
@@ -148,7 +252,7 @@ def plot_seasonal_climatology(ds: xr.Dataset, output) -> None:
     ax.set_xlabel("Month")
     ax.set_ylabel("Smoke AOD")
     ax2.set_ylabel("ΔF_TOA_SW (W m⁻²)")
-    ax.set_title("Seasonal climatology — Pacific Northwest")
+    ax.set_title(f"Seasonal climatology — {_region_label(ds)}")
     ax.legend(loc="upper left", fontsize=9)
     ax2.legend(loc="upper right", fontsize=9)
     _annotate_caption(fig, ds)
@@ -157,26 +261,33 @@ def plot_seasonal_climatology(ds: xr.Dataset, output) -> None:
 
 def plot_qfed_emissions_timeseries(ds: xr.Dataset, output) -> None:
     fig, axes = plt.subplots(3, 1, figsize=(10, 7), sharex=True)
+    main_color = NCAR_COLORS["ncar_blue"]
+    aod_color = NCAR_COLORS["aqua"]
     for ax, var, label in zip(axes, ("qfed_bc", "qfed_oc", "qfed_co"), ("BC", "OC", "CO")):
-        ax.plot(ds["time"], ds[var], lw=1.0, label=label)
+        _plot_annual_bars(ax, ds[var], main_color)
+        ax.plot(ds["time"], ds[var], lw=1.2, color=main_color, label=label, zorder=2)
         ax.set_ylabel(f"{label} (kg m⁻² s⁻¹)")
         if "smoke_aod_terra" in ds:
             ax2 = ax.twinx()
-            ax2.plot(ds["time"], ds["smoke_aod_terra"], color="C1", lw=0.8, alpha=0.6)
-            ax2.set_ylabel("smoke AOD", color="C1")
+            ax2.plot(ds["time"], ds["smoke_aod_terra"], color=aod_color, lw=0.8, alpha=0.6)
+            ax2.set_ylabel("smoke AOD", color=aod_color)
         ax.legend(loc="upper left", fontsize=9)
     axes[-1].set_xlabel("Year")
-    fig.suptitle("QFED biomass-burning emissions — Pacific Northwest")
+    _apply_date_range(axes[-1])
+    fig.suptitle(f"QFED biomass-burning emissions — {_region_label(ds)}")
     _annotate_caption(fig, ds)
     save_figure(fig, output)
 
 
 def plot_cloud_fraction_timeseries(ds: xr.Dataset, output) -> None:
     fig, ax = plt.subplots(figsize=(10, 3.5))
-    ax.plot(ds["time"], ds["ceres_cloud_fraction"], lw=1.0)
+    color = NCAR_COLORS["ncar_blue"]
+    _plot_annual_bars(ax, ds["ceres_cloud_fraction"], color)
+    ax.plot(ds["time"], ds["ceres_cloud_fraction"], lw=1.2, color=color, zorder=2)
     ax.set_xlabel("Year")
     ax.set_ylabel("Cloud fraction")
-    ax.set_title("CERES total-column cloud fraction — Pacific Northwest")
+    ax.set_title(f"CERES total-column cloud fraction — {_region_label(ds)}")
+    _apply_date_range(ax)
     _annotate_caption(fig, ds)
     save_figure(fig, output)
 
@@ -266,6 +377,7 @@ def plot_merra2_obs_scaling(ds, output) -> None:
     axes[1].set_xlabel("Year")
     axes[1].set_ylabel("MERRA-2 / MODIS")
     axes[1].set_title("Scaling-factor time series")
+    _apply_date_range(axes[1])
     _annotate_caption(fig, ds, methods="ratio used to validate MERRA-2 fractional split, not magnitude")
     save_figure(fig, output)
 
