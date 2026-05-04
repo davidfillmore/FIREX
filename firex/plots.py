@@ -192,7 +192,7 @@ def plot_aod_total_timeseries(ds: xr.Dataset, aeronet, output) -> None:
         ax.set_ylabel("AOD 550 nm")
         _apply_date_range(ax)
     axes[-1][0].set_xlabel("Year")
-    fig.suptitle(f"Total AOD at AERONET sites — {_region_label(ds)}")
+    fig.suptitle(f"Total AOD at AERONET Sites — {_region_label(ds)}")
     fig.legend(handles.values(), handles.keys(), loc="lower center",
                ncol=min(5, len(handles)), fontsize=9, frameon=False)
     fig.tight_layout(rect=(0.0, 0.04, 1.0, 0.97))
@@ -215,7 +215,7 @@ def _plot_aod_total_region_mean(ds, aeronet, series, output) -> None:
             )
     ax.set_xlabel("Year")
     ax.set_ylabel("AOD 550 nm")
-    ax.set_title(f"Total AOD — {_region_label(ds)} monthly (regional mean)")
+    ax.set_title(f"Total AOD — {_region_label(ds)} Monthly (Regional Mean)")
     ax.legend(fontsize=8, loc="upper left")
     _apply_date_range(ax)
     _annotate_caption(fig, ds)
@@ -228,8 +228,8 @@ def plot_smoke_fraction_timeseries(ds: xr.Dataset, output) -> None:
     _plot_annual_bars(ax, ds["smoke_fraction"], color)
     ax.plot(ds["time"], ds["smoke_fraction"], lw=1.2, color=color, zorder=2)
     ax.set_xlabel("Year")
-    ax.set_ylabel("Smoke fraction (–)")
-    ax.set_title(f"MERRA-2-derived smoke fraction — {_region_label(ds)}")
+    ax.set_ylabel("Smoke Fraction (–)")
+    ax.set_title(f"MERRA-2-Derived Smoke Fraction — {_region_label(ds)}")
     _apply_date_range(ax)
     _annotate_caption(fig, ds, methods="smoke_fraction = (BC + OC_bb) / TOTAL")
     save_figure(fig, output)
@@ -250,7 +250,7 @@ def plot_smoke_aod_timeseries(ds: xr.Dataset, output) -> None:
     ax.plot(ds["time"], mean, lw=1.2, color=color, label="ensemble mean", zorder=3)
     ax.set_xlabel("Year")
     ax.set_ylabel("Smoke AOD 550 nm")
-    ax.set_title(f"Smoke AOD — {_region_label(ds)} monthly")
+    ax.set_title(f"Smoke AOD — {_region_label(ds)} Monthly")
     ax.legend(fontsize=9)
     _apply_date_range(ax)
     _annotate_caption(fig, ds, methods="smoke_AOD = smoke_fraction × observed AOD")
@@ -265,7 +265,7 @@ def _three_panel_anomaly(ds, prefix: str, label: str, output) -> None:
     clr_color = NCAR_COLORS["red"]
     for ax, comp, ylabel in zip(
         axes, ("sw", "lw", "net"),
-        (f"{label} SW anomaly (W m⁻²)", f"{label} LW anomaly (W m⁻²)", f"{label} Net anomaly (W m⁻²)"),
+        (f"{label} SW Anomaly (W m⁻²)", f"{label} LW Anomaly (W m⁻²)", f"{label} Net Anomaly (W m⁻²)"),
     ):
         all_var = f"{prefix}_{comp}_all_anom" if "sfc" not in prefix else f"{prefix}_{comp}_down_all_anom"
         clr_var = f"{prefix}_{comp}_clr_anom" if "sfc" not in prefix else f"{prefix}_{comp}_down_clr_anom"
@@ -275,16 +275,151 @@ def _three_panel_anomaly(ds, prefix: str, label: str, output) -> None:
             clr_var = f"{prefix}_net_clr_anom"
         if clr_var in ds:
             _plot_anomaly_fill(ax, ds["time"].values, ds[clr_var].values, pos_color, neg_color)
-            ax.plot(ds["time"], ds[clr_var], label="clear-sky", lw=1.2, color=clr_color, zorder=3)
+            ax.plot(ds["time"], ds[clr_var], label="Clear-Sky", lw=1.2, color=clr_color, zorder=3)
         if all_var in ds:
-            ax.plot(ds["time"], ds[all_var], label="all-sky", lw=0.8, color=all_color, alpha=0.8, zorder=2)
+            ax.plot(ds["time"], ds[all_var], label="All-Sky", lw=0.8, color=all_color, alpha=0.8, zorder=2)
         ax.set_ylabel(ylabel)
         ax.legend(fontsize=9)
     axes[-1].set_xlabel("Year")
     _apply_date_range(axes[-1])
-    fig.suptitle(f"CERES {label} radiative-flux anomalies — {_region_label(ds)}")
+    fig.suptitle(f"CERES {label} Radiative-Flux Anomalies — {_region_label(ds)}")
     _annotate_caption(fig, ds, methods="anomaly = monthly value − month-of-year climatology")
     save_figure(fig, output)
+
+
+def _plot_aod_sw_pair(ds: xr.Dataset, kind: str, output) -> None:
+    """2-panel: total AOD on top; SW clear-sky anomaly + smoke AOD (twinx) below."""
+    if kind == "sfc":
+        clr_var = "ceres_sfc_sw_down_clr_anom"
+        ylabel_anom = "ΔF$_{SFC,SW↓}$ Clear-Sky (W m⁻²)"
+        title_tag = "Surface"
+    elif kind == "toa":
+        clr_var = "ceres_toa_sw_clr_anom"
+        ylabel_anom = "ΔF$_{TOA,SW}$ Clear-Sky (W m⁻²)"
+        title_tag = "TOA"
+    else:
+        raise ValueError(f"kind must be 'sfc' or 'toa', got {kind!r}")
+
+    fig, axes = plt.subplots(
+        2, 1, figsize=(11, 9), sharex=True,
+        gridspec_kw={"height_ratios": [1, 1.6]},
+    )
+
+    # Top: total AOD.
+    ax = axes[0]
+    sat_series = [
+        ("modis_terra_aod", "MODIS Terra", NCAR_COLORS["ncar_blue"]),
+        ("modis_aqua_aod", "MODIS Aqua", NCAR_COLORS["aqua"]),
+        ("viirs_snpp_aod", "VIIRS-SNPP", NCAR_COLORS["orange"]),
+        ("viirs_noaa20_aod", "VIIRS-NOAA20", NCAR_COLORS["purple"]),
+    ]
+    present = [(v, lbl, c) for v, lbl, c in sat_series if v in ds]
+    if present:
+        ensemble = xr.concat([ds[v] for v, _, _ in present], dim="src").mean("src")
+        _plot_annual_bars(ax, ensemble, NCAR_COLORS["gray"])
+        for var, label, color in present:
+            ax.plot(ds["time"], ds[var], label=label, lw=1.0, color=color, zorder=2)
+    if "merra2_aer_TOTEXTTAU" in ds:
+        ax.plot(ds["time"], ds["merra2_aer_TOTEXTTAU"], label="MERRA-2 TOT",
+                lw=1.4, color=NCAR_COLORS["red"], zorder=3)
+    ax.set_ylabel("Total AOD 550 nm")
+    ax.legend(fontsize=8, loc="upper left", ncol=2)
+
+    # Bottom: SW anomaly + smoke AOD on twinx.
+    ax_a = axes[1]
+    # Positive ΔF in blue, negative in orange — orange marks dimming/cooling
+    # so it visually pairs with the smoke peaks.
+    pos_color = NCAR_COLORS["ncar_blue"]
+    neg_color = NCAR_COLORS["orange"]
+    if clr_var in ds:
+        _plot_anomaly_fill(ax_a, ds["time"].values, ds[clr_var].values,
+                           pos_color, neg_color)
+        line_anom, = ax_a.plot(ds["time"], ds[clr_var], lw=1.2,
+                               color=NCAR_COLORS["red"], zorder=3,
+                               label="ΔF Clear-Sky")
+    ax_a.set_ylabel(ylabel_anom)
+    if kind == "sfc":
+        # Invert so dimming (negative ΔF) reads "up" — visually aligns with
+        # the AOD spikes in the panel above.
+        ax_a.invert_yaxis()
+
+    # Smoke AOD: ensemble mean of per-platform smoke_aod_*.
+    smoke_cols = [c for c in
+                  ("smoke_aod_terra","smoke_aod_aqua","smoke_aod_snpp","smoke_aod_noaa20")
+                  if c in ds]
+    if smoke_cols:
+        smoke = xr.concat([ds[c] for c in smoke_cols], dim="src").mean("src")
+        ax_s = ax_a.twinx()
+        smoke_color = "black"
+        line_smoke, = ax_s.plot(ds["time"], smoke, lw=1.2, color=smoke_color,
+                                alpha=0.9, label="Smoke AOD")
+        ax_s.set_ylabel("Smoke AOD 550 nm", color=smoke_color)
+        ax_s.tick_params(axis="y", colors=smoke_color)
+        # Layer smoke beneath the SW anomaly: drop the twin axis below the
+        # primary, then make the primary's face transparent so smoke shows
+        # through. (matplotlib draws twinx on top by default — zorder alone
+        # isn't enough.)
+        ax_s.set_zorder(ax_a.get_zorder() - 1)
+        ax_a.patch.set_alpha(0.0)
+
+        # Mark the four highest-smoke-AOD months in the record. Label each
+        # smoke marker with the year; mirror the marker on the SW-anomaly
+        # trace in orange.
+        smoke_vals = smoke.values
+        years = pd.DatetimeIndex(smoke["time"].values).year
+        sw_vals = ds[clr_var].values if clr_var in ds else np.full_like(smoke_vals, np.nan)
+        df = pd.DataFrame({"time": smoke["time"].values, "smoke": smoke_vals,
+                           "sw": sw_vals, "year": years})
+        # EAU's Black Summer (Dec 2019 + Jan 2020) takes two of the top slots,
+        # so bump to 5 there to keep four distinct fire events labeled.
+        top_n = 5 if ds.attrs.get("region") == "eastern-australia" else 4
+        peaks = df.dropna(subset=["smoke"]).nlargest(top_n, "smoke").sort_values("time")
+        if not peaks.empty:
+            # Markers and labels go on ax_a (the top-drawn axis) so they sit
+            # above the SW-anomaly fill. Use a blended transform: x in time
+            # data coords (shared), y in ax_s's smoke-AOD coords.
+            import matplotlib.dates as mdates
+            from matplotlib.transforms import blended_transform_factory
+            trans_smoke = blended_transform_factory(ax_a.transData, ax_s.transData)
+            peak_xnum = mdates.date2num(peaks["time"].values)
+            ax_a.scatter(peak_xnum, peaks["smoke"], s=42, facecolor="black",
+                         edgecolor="white", linewidths=0.6,
+                         transform=trans_smoke, zorder=20, clip_on=False)
+            for x_num, row in zip(peak_xnum, peaks.itertuples(index=False)):
+                label = pd.Timestamp(row.time).strftime("%b %Y")
+                ax_a.annotate(
+                    label, xy=(x_num, row.smoke),
+                    xycoords=trans_smoke,
+                    xytext=(6, 0), textcoords="offset points",
+                    ha="left", va="center", fontsize=8, color="black",
+                    zorder=21, clip_on=False,
+                )
+            valid_sw = peaks.dropna(subset=["sw"])
+            if not valid_sw.empty:
+                sw_colors = [pos_color if v >= 0 else neg_color for v in valid_sw["sw"]]
+                ax_a.scatter(valid_sw["time"], valid_sw["sw"], s=42,
+                             facecolor=sw_colors,
+                             edgecolor="white", linewidths=0.6, zorder=20)
+        # Combine legends from both y-axes.
+        handles, labels = ax_a.get_legend_handles_labels()
+        h2, l2 = ax_s.get_legend_handles_labels()
+        ax_a.legend(handles + h2, labels + l2, fontsize=8, loc="upper left")
+    else:
+        ax_a.legend(fontsize=8, loc="upper left")
+
+    axes[-1].set_xlabel("Year")
+    _apply_date_range(axes[-1])
+    fig.suptitle(f"AOD and CERES SW {title_tag} Clear-Sky Anomaly — {_region_label(ds)}")
+    fig.tight_layout()
+    save_figure(fig, output)
+
+
+def plot_aod_sfc(ds: xr.Dataset, output) -> None:
+    _plot_aod_sw_pair(ds, kind="sfc", output=output)
+
+
+def plot_aod_toa(ds: xr.Dataset, output) -> None:
+    _plot_aod_sw_pair(ds, kind="toa", output=output)
 
 
 def plot_ceres_toa_anomaly(ds: xr.Dataset, output) -> None:
@@ -307,7 +442,7 @@ def plot_seasonal_climatology(ds: xr.Dataset, output) -> None:
     ax.set_xlabel("Month")
     ax.set_ylabel("Smoke AOD")
     ax2.set_ylabel("ΔF_TOA_SW (W m⁻²)")
-    ax.set_title(f"Seasonal climatology — {_region_label(ds)}")
+    ax.set_title(f"Seasonal Climatology — {_region_label(ds)}")
     ax.legend(loc="upper left", fontsize=9)
     ax2.legend(loc="upper right", fontsize=9)
     _annotate_caption(fig, ds)
@@ -325,11 +460,11 @@ def plot_qfed_emissions_timeseries(ds: xr.Dataset, output) -> None:
         if "smoke_aod_terra" in ds:
             ax2 = ax.twinx()
             ax2.plot(ds["time"], ds["smoke_aod_terra"], color=aod_color, lw=0.8, alpha=0.6)
-            ax2.set_ylabel("smoke AOD", color=aod_color)
+            ax2.set_ylabel("Smoke AOD", color=aod_color)
         ax.legend(loc="upper left", fontsize=9)
     axes[-1].set_xlabel("Year")
     _apply_date_range(axes[-1])
-    fig.suptitle(f"QFED biomass-burning emissions — {_region_label(ds)}")
+    fig.suptitle(f"QFED Biomass-Burning Emissions — {_region_label(ds)}")
     _annotate_caption(fig, ds)
     save_figure(fig, output)
 
@@ -340,8 +475,8 @@ def plot_cloud_fraction_timeseries(ds: xr.Dataset, output) -> None:
     _plot_annual_bars(ax, ds["ceres_cloud_fraction"], color)
     ax.plot(ds["time"], ds["ceres_cloud_fraction"], lw=1.2, color=color, zorder=2)
     ax.set_xlabel("Year")
-    ax.set_ylabel("Cloud fraction")
-    ax.set_title(f"CERES total-column cloud fraction — {_region_label(ds)}")
+    ax.set_ylabel("Cloud Fraction")
+    ax.set_title(f"CERES Total-Column Cloud Fraction — {_region_label(ds)}")
     _apply_date_range(ax)
     _annotate_caption(fig, ds)
     save_figure(fig, output)
@@ -373,8 +508,8 @@ def _scatter_with_ols(ax, x: np.ndarray, y: np.ndarray, label: str) -> None:
 def _scatter_pair(ds, smoke_var: str, all_var: str, clr_var: str, ylabel: str, output) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.5), sharey=True)
     smoke = ds[smoke_var].values
-    _scatter_with_ols(axes[0], smoke, ds[clr_var].values, "clear-sky")
-    _scatter_with_ols(axes[1], smoke, ds[all_var].values, "all-sky")
+    _scatter_with_ols(axes[0], smoke, ds[clr_var].values, "Clear-Sky")
+    _scatter_with_ols(axes[1], smoke, ds[all_var].values, "All-Sky")
     axes[0].set_ylabel(ylabel)
     for ax in axes:
         ax.set_xlabel("Smoke AOD (MODIS Terra)")
@@ -444,7 +579,7 @@ def plot_aeronet_vs_modis_scatter(ds, aeronet, output) -> None:
         ax.plot([0, lim], [0, lim], "k--", lw=0.6)
         ax.set_xlim(0, lim); ax.set_ylim(0, lim)
         ax.set_xlabel("AERONET AOD 550 nm")
-        ax.set_ylabel("MODIS Terra (site gridcell)")
+        ax.set_ylabel("MODIS Terra (Site Gridcell)")
         ax.set_title(str(site))
     for j in range(n_sites, nrows * ncols):
         axes[j // ncols][j % ncols].set_visible(False)
@@ -460,12 +595,12 @@ def plot_merra2_obs_scaling(ds, output) -> None:
     axes[0].plot([0, lim], [0, lim], "k--", lw=0.8)
     axes[0].set_xlabel("MODIS Terra AOD")
     axes[0].set_ylabel("MERRA-2 TOTEXTTAU")
-    axes[0].set_title("Magnitude comparison")
+    axes[0].set_title("Magnitude Comparison")
     ratio = ds["merra2_aer_TOTEXTTAU"] / ds["modis_terra_aod"]
     axes[1].plot(ds["time"], ratio, lw=1.0)
     axes[1].set_xlabel("Year")
     axes[1].set_ylabel("MERRA-2 / MODIS")
-    axes[1].set_title("Scaling-factor time series")
+    axes[1].set_title("Scaling-Factor Time Series")
     _apply_date_range(axes[1])
     _annotate_caption(fig, ds, methods="ratio used to validate MERRA-2 fractional split, not magnitude")
     save_figure(fig, output)
@@ -510,5 +645,5 @@ def plot_spatial_maps_peak_year(
         ax.set_extent([lon_min - 5, lon_max + 5, lat_min - 5, lat_max + 5])
         ax.set_title(title, fontsize=10)
         plt.colorbar(m, ax=ax, shrink=0.7)
-    fig.suptitle(f"Spatial fields: climatology vs. {peak_year} anomaly")
+    fig.suptitle(f"Spatial Fields: Climatology vs. {peak_year} Anomaly")
     save_figure(fig, output)

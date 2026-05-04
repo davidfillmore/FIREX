@@ -31,6 +31,8 @@ regression:
 
 plots:
   - aod_total_timeseries
+  - aod_sfc
+  - aod_toa
   - smoke_fraction_timeseries
   - smoke_aod_timeseries
   - ceres_toa_anomaly

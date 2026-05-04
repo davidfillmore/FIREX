@@ -300,6 +300,10 @@ def _stage6_plots(cfg: dict, merged_path: Path, out_dir: Path, force: bool) -> N
     plot_fns = {
         "aod_total_timeseries":
             lambda: plots.plot_aod_total_timeseries(merged, aeronet_ds, plots_dir / "aod_total_timeseries.png"),
+        "aod_sfc":
+            lambda: plots.plot_aod_sfc(merged, plots_dir / "aod_sfc.png"),
+        "aod_toa":
+            lambda: plots.plot_aod_toa(merged, plots_dir / "aod_toa.png"),
         "smoke_fraction_timeseries":
             lambda: plots.plot_smoke_fraction_timeseries(merged, plots_dir / "smoke_fraction_timeseries.png"),
         "smoke_aod_timeseries":
