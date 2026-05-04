@@ -49,6 +49,7 @@ def load_viirs_monthly(
     paths: Iterable[Path],
     platform: Literal["snpp", "noaa20"],
     mask: xr.Dataset,
+    sites: xr.Dataset | None = None,
 ) -> xr.Dataset:
     if platform not in ("snpp", "noaa20"):
         raise ValueError(f"platform must be 'snpp' or 'noaa20', got {platform!r}")
@@ -63,7 +64,11 @@ def load_viirs_monthly(
         lat=src["lat"], lon=src["lon"], method="nearest"
     ).fillna(0.0)
     aod = src[_AOD_VAR].weighted(weight).mean(dim=("lat", "lon"))
-    return xr.Dataset({f"viirs_{platform}_aod": aod}).assign_attrs(
+    out_vars = {f"viirs_{platform}_aod": aod}
+    if sites is not None and sites.sizes.get("site", 0) > 0:
+        from firex.loaders.site_sample import sample_at_sites
+        out_vars[f"viirs_{platform}_aod_site"] = sample_at_sites(src[_AOD_VAR], sites)
+    return xr.Dataset(out_vars).assign_attrs(
         source_files=";".join(str(p) for p in paths),
         platform=platform,
     )

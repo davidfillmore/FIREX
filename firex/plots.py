@@ -139,13 +139,68 @@ def _annotate_caption(fig, ds: xr.Dataset, methods: str = "") -> None:
 
 
 def plot_aod_total_timeseries(ds: xr.Dataset, aeronet, output) -> None:
-    fig, ax = plt.subplots(figsize=(10, 4))
+    """Per-AERONET-site panel grid: satellite AODs sampled at the site
+    (nearest gridcell) overlaid with AERONET observations at that site.
+
+    Falls back to a single-panel region-mean view when no AERONET sites
+    are present or the per-site companion vars aren't in the dataset.
+    """
     series = [
         ("modis_terra_aod", "MODIS Terra", NCAR_COLORS["ncar_blue"]),
         ("modis_aqua_aod", "MODIS Aqua", NCAR_COLORS["aqua"]),
         ("viirs_snpp_aod", "VIIRS-SNPP", NCAR_COLORS["orange"]),
         ("viirs_noaa20_aod", "VIIRS-NOAA20", NCAR_COLORS["purple"]),
     ]
+    have_sites = (
+        aeronet is not None
+        and "aeronet_aod_550" in aeronet
+        and aeronet.sizes.get("site", 0) > 0
+        and any(f"{v}_site" in ds for v, _, _ in series)
+    )
+    if not have_sites:
+        # Legacy region-mean view (no AERONET in bbox).
+        _plot_aod_total_region_mean(ds, aeronet, series, output)
+        return
+
+    sites = list(aeronet["site"].values)
+    n = len(sites)
+    fig, axes = plt.subplots(n, 1, figsize=(10, 3.0 * n),
+                             sharex=True, squeeze=False)
+    handles: dict[str, object] = {}
+    for i, site in enumerate(sites):
+        ax = axes[i][0]
+        site_present = [(v, lbl, c) for v, lbl, c in series if f"{v}_site" in ds]
+        if site_present:
+            ensemble = xr.concat(
+                [ds[f"{v}_site"].sel(site=site) for v, _, _ in site_present], dim="src",
+            ).mean("src")
+            _plot_annual_bars(ax, ensemble, NCAR_COLORS["gray"])
+            for var, label, color in site_present:
+                line, = ax.plot(
+                    ds["time"], ds[f"{var}_site"].sel(site=site),
+                    label=label, lw=1.2, color=color, zorder=2,
+                )
+                handles[label] = line
+        # AERONET points at this site.
+        ae = aeronet["aeronet_aod_550"].sel(site=site)
+        sc = ax.scatter(
+            aeronet["time"], ae,
+            s=8, alpha=0.6, color=NCAR_COLORS["red"], zorder=3,
+        )
+        handles["AERONET"] = sc
+        ax.set_title(str(site))
+        ax.set_ylabel("AOD 550 nm")
+        _apply_date_range(ax)
+    axes[-1][0].set_xlabel("Year")
+    fig.suptitle(f"Total AOD at AERONET sites — {_region_label(ds)}")
+    fig.legend(handles.values(), handles.keys(), loc="lower center",
+               ncol=min(5, len(handles)), fontsize=9, frameon=False)
+    fig.tight_layout(rect=(0.0, 0.04, 1.0, 0.97))
+    save_figure(fig, output)
+
+
+def _plot_aod_total_region_mean(ds, aeronet, series, output) -> None:
+    fig, ax = plt.subplots(figsize=(10, 4))
     present = [(v, lbl, c) for v, lbl, c in series if v in ds]
     if present:
         ensemble = xr.concat([ds[v] for v, _, _ in present], dim="src").mean("src")
@@ -160,7 +215,7 @@ def plot_aod_total_timeseries(ds: xr.Dataset, aeronet, output) -> None:
             )
     ax.set_xlabel("Year")
     ax.set_ylabel("AOD 550 nm")
-    ax.set_title(f"Total AOD — {_region_label(ds)} monthly")
+    ax.set_title(f"Total AOD — {_region_label(ds)} monthly (regional mean)")
     ax.legend(fontsize=8, loc="upper left")
     _apply_date_range(ax)
     _annotate_caption(fig, ds)
@@ -344,23 +399,57 @@ def plot_scatter_dF_SFC_vs_smoke(ds, output) -> None:
 
 
 def plot_aeronet_vs_modis_scatter(ds, aeronet, output) -> None:
-    fig, ax = plt.subplots(figsize=(6, 6))
+    """Per-site scatter of AERONET vs MODIS Terra at the same gridcell.
+
+    Uses `modis_terra_aod_site` (nearest gridcell at the AERONET site) when
+    present; falls back to the region-mean `modis_terra_aod` otherwise.
+    """
     n_sites = aeronet.sizes.get("site", 0) if aeronet is not None else 0
-    if aeronet is not None and "aeronet_aod_550" in aeronet and n_sites > 0:
-        for site in aeronet["site"].values:
-            modis = ds["modis_terra_aod"].interp(time=aeronet["time"])
-            site_aod = aeronet["aeronet_aod_550"].sel(site=site)
-            ax.scatter(site_aod, modis, s=10, alpha=0.6, label=str(site))
-        lim = max(np.nanmax(aeronet["aeronet_aod_550"].values), float(ds["modis_terra_aod"].max()))
-        ax.plot([0, lim], [0, lim], "k--", lw=0.8)
-        ax.legend(fontsize=8)
-    else:
+    if aeronet is None or "aeronet_aod_550" not in aeronet or n_sites == 0:
+        fig, ax = plt.subplots(figsize=(6, 6))
         ax.text(0.5, 0.5, "no AERONET sites inside region bbox",
                 ha="center", va="center", transform=ax.transAxes, fontsize=11)
-    ax.set_xlabel("AERONET AOD 550 nm")
-    ax.set_ylabel("MODIS Terra gridcell AOD")
-    ax.set_title("AERONET vs. MODIS")
-    _annotate_caption(fig, ds)
+        ax.set_xlabel("AERONET AOD 550 nm")
+        ax.set_ylabel("MODIS Terra gridcell AOD")
+        ax.set_title("AERONET vs. MODIS")
+        save_figure(fig, output)
+        return
+
+    sites = list(aeronet["site"].values)
+    use_site_var = "modis_terra_aod_site" in ds
+    ncols = min(n_sites, 2)
+    nrows = (n_sites + ncols - 1) // ncols
+    fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 5 * nrows), squeeze=False)
+    for i, site in enumerate(sites):
+        ax = axes[i // ncols][i % ncols]
+        site_aod = aeronet["aeronet_aod_550"].sel(site=site)
+        if use_site_var:
+            modis = ds["modis_terra_aod_site"].sel(site=site).interp(time=aeronet["time"])
+        else:
+            modis = ds["modis_terra_aod"].interp(time=aeronet["time"])
+        x = site_aod.values
+        y = modis.values
+        valid = np.isfinite(x) & np.isfinite(y)
+        ax.scatter(x[valid], y[valid], s=12, alpha=0.6, color=NCAR_COLORS["ncar_blue"])
+        if valid.sum() >= 3:
+            xv, yv = x[valid], y[valid]
+            slope, intercept = np.polyfit(xv, yv, 1)
+            r2 = 1 - ((yv - (slope * xv + intercept)) ** 2).sum() / ((yv - yv.mean()) ** 2).sum()
+            xs = np.linspace(0, np.nanmax(xv), 50)
+            ax.plot(xs, slope * xs + intercept, color=NCAR_COLORS["red"], lw=1.2)
+            ax.text(0.05, 0.95, f"n = {valid.sum()}\nβ = {slope:.2f}\nR² = {r2:.2f}",
+                    transform=ax.transAxes, va="top", fontsize=9,
+                    bbox=dict(facecolor="white", alpha=0.8, edgecolor="none"))
+        lim = float(np.nanmax(np.concatenate([x[valid], y[valid]]))) if valid.any() else 1.0
+        ax.plot([0, lim], [0, lim], "k--", lw=0.6)
+        ax.set_xlim(0, lim); ax.set_ylim(0, lim)
+        ax.set_xlabel("AERONET AOD 550 nm")
+        ax.set_ylabel("MODIS Terra (site gridcell)")
+        ax.set_title(str(site))
+    for j in range(n_sites, nrows * ncols):
+        axes[j // ncols][j % ncols].set_visible(False)
+    fig.suptitle(f"AERONET vs MODIS Terra — {_region_label(ds)}")
+    fig.tight_layout()
     save_figure(fig, output)
 
 

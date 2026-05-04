@@ -18,6 +18,7 @@ def load_merra2_monthly(
     paths: Iterable[Path],
     collection: str,
     mask: xr.Dataset,
+    sites: xr.Dataset | None = None,
 ) -> xr.Dataset:
     if collection not in _COLLECTION_VARS:
         raise ValueError(
@@ -35,8 +36,13 @@ def load_merra2_monthly(
         lat=src["lat"], lon=src["lon"], method="nearest"
     ).fillna(0.0)
     out = {}
+    have_sites = sites is not None and sites.sizes.get("site", 0) > 0
+    if have_sites:
+        from firex.loaders.site_sample import sample_at_sites
     for v in wanted:
         out[f"merra2_{collection}_{v}"] = src[v].weighted(weight).mean(dim=("lat", "lon"))
+        if have_sites:
+            out[f"merra2_{collection}_{v}_site"] = sample_at_sites(src[v], sites)
     return xr.Dataset(out).assign_attrs(
         source_files=";".join(str(p) for p in paths),
         collection=collection,

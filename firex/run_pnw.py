@@ -13,10 +13,8 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-import yaml
 import xarray as xr
 
-import davinci_monet
 import firex
 from firex import attribution, anomaly, plots, regression
 from firex.loaders import (
@@ -54,7 +52,12 @@ def _git_sha() -> str:
 def _log_header(cfg: dict) -> None:
     logger.info("FIREX run starting")
     logger.info("  firex version: %s", firex.__version__)
-    logger.info("  davinci_monet version: %s", getattr(davinci_monet, "__version__", "unknown"))
+    try:
+        import davinci_monet
+        dm_version = getattr(davinci_monet, "__version__", "unknown")
+    except ImportError:
+        dm_version = "not-installed"
+    logger.info("  davinci_monet version: %s", dm_version)
     logger.info("  git SHA (FIREX): %s", _git_sha())
     logger.info("  region: %s", cfg["region"])
     logger.info("  bbox: %s", cfg["bbox"])
@@ -96,6 +99,23 @@ def _stage2_loaders(cfg: dict, out_dir: Path, mask_path: Path, force: bool) -> d
     region = REGIONS[cfg["region"]]
     out: dict[str, Path] = {}
 
+    # AERONET first — the resulting site list is passed to gridded loaders so
+    # they can emit per-site nearest-gridcell samples alongside the region mean.
+    aeronet_root = Path(cfg["paths"]["aeronet"]).expanduser()
+    aeronet_files = _glob_files(aeronet_root, "AeroNet_*.nc")
+    sites: xr.Dataset | None = None
+    if aeronet_files:
+        out_path = data_dir / "aeronet_pnw.nc"
+        if force or not output_is_fresh(out_path, aeronet_files):
+            atomic_to_netcdf(aeronet.load_aeronet(aeronet_root, region=region), out_path)
+            logger.info("[stage 2] AERONET → %s (%d monthly files)", out_path, len(aeronet_files))
+        out["aeronet"] = out_path
+        sites = xr.open_dataset(out_path).load()
+        if sites.sizes.get("site", 0) == 0:
+            sites = None
+    else:
+        logger.warning("No AERONET files found at %s; aeronet stage skipped", aeronet_root)
+
     # CERES EBAF: pick the latest granule
     ceres_files = _glob_files(cfg["paths"]["ceres_ebaf"], "CERES_EBAF_Edition*.nc")
     if not ceres_files:
@@ -112,7 +132,10 @@ def _stage2_loaders(cfg: dict, out_dir: Path, mask_path: Path, force: bool) -> d
         files = _glob_files(cfg["paths"][key], "*_M3*.hdf*") + _glob_files(cfg["paths"][key], "*.nc4")
         out_path = data_dir / f"modis_{plat}.nc"
         if force or not output_is_fresh(out_path, files):
-            atomic_to_netcdf(modis_monthly.load_modis_monthly(files, plat, mask=mask), out_path)
+            atomic_to_netcdf(
+                modis_monthly.load_modis_monthly(files, plat, mask=mask, sites=sites),
+                out_path,
+            )
             logger.info("[stage 2] MODIS %s → %s (%d files)", plat, out_path, len(files))
         out[key] = out_path
 
@@ -121,7 +144,10 @@ def _stage2_loaders(cfg: dict, out_dir: Path, mask_path: Path, force: bool) -> d
         files = _glob_files(cfg["paths"][key], "*.nc")
         out_path = data_dir / f"viirs_{plat}.nc"
         if force or not output_is_fresh(out_path, files):
-            atomic_to_netcdf(viirs_monthly.load_viirs_monthly(files, plat, mask=mask), out_path)
+            atomic_to_netcdf(
+                viirs_monthly.load_viirs_monthly(files, plat, mask=mask, sites=sites),
+                out_path,
+            )
             logger.info("[stage 2] VIIRS %s → %s (%d files)", plat, out_path, len(files))
         out[key] = out_path
 
@@ -138,11 +164,14 @@ def _stage2_loaders(cfg: dict, out_dir: Path, mask_path: Path, force: bool) -> d
             continue
         out_path = data_dir / f"merra2_{coll}.nc"
         if force or not output_is_fresh(out_path, files):
-            atomic_to_netcdf(merra2_monthly.load_merra2_monthly(files, coll, mask=mask), out_path)
+            atomic_to_netcdf(
+                merra2_monthly.load_merra2_monthly(files, coll, mask=mask, sites=sites),
+                out_path,
+            )
             logger.info("[stage 2] MERRA-2 %s → %s (%d files)", coll, out_path, len(files))
         out[key] = out_path
 
-    # QFED
+    # QFED — region-mean only; no per-site companion (not used in AERONET plots).
     out_path = data_dir / "qfed.nc"
     qfed_root = Path(cfg["paths"]["qfed"]).expanduser()
     if force or not output_is_fresh(out_path, list(qfed_root.rglob("*.nc4"))):
@@ -152,18 +181,6 @@ def _stage2_loaders(cfg: dict, out_dir: Path, mask_path: Path, force: bool) -> d
         )
         logger.info("[stage 2] QFED → %s", out_path)
     out["qfed"] = out_path
-
-    # AERONET — directory of per-month files (real layout) or single fixture file
-    aeronet_root = Path(cfg["paths"]["aeronet"]).expanduser()
-    aeronet_files = _glob_files(aeronet_root, "AeroNet_*.nc")
-    if aeronet_files:
-        out_path = data_dir / "aeronet_pnw.nc"
-        if force or not output_is_fresh(out_path, aeronet_files):
-            atomic_to_netcdf(aeronet.load_aeronet(aeronet_root, region=region), out_path)
-            logger.info("[stage 2] AERONET → %s (%d monthly files)", out_path, len(aeronet_files))
-        out["aeronet"] = out_path
-    else:
-        logger.warning("No AERONET files found at %s; aeronet stage skipped", aeronet_root)
 
     return out
 
@@ -190,7 +207,10 @@ def _stage3_attribution(stage2: dict[str, Path], out_dir: Path, force: bool) -> 
     return out_path
 
 
-def _stage4_merge(stage2: dict[str, Path], stage3: Path, out_dir: Path, force: bool) -> Path:
+def _stage4_merge(
+    stage2: dict[str, Path], stage3: Path, out_dir: Path, force: bool,
+    cfg: dict | None = None,
+) -> Path:
     out_path = out_dir / "data" / "merged.nc"
     inputs = list(stage2.values()) + [stage3]
     if not force and output_is_fresh(out_path, inputs):
@@ -198,6 +218,15 @@ def _stage4_merge(stage2: dict[str, Path], stage3: Path, out_dir: Path, force: b
         return out_path
     parts = [_to_month_start(xr.open_dataset(p).load()) for p in inputs if p is not None]
     merged = xr.merge(parts, compat="override")
+    # Stamp region + bbox explicitly — xr.merge inherits whichever input's attrs
+    # were first, which may not be the one carrying region context.
+    if cfg is not None:
+        merged.attrs["region"] = cfg["region"]
+        bb = cfg.get("bbox") or {}
+        if bb:
+            merged.attrs["bbox"] = (
+                f"lon[{bb['lon_min']},{bb['lon_max']}] lat[{bb['lat_min']},{bb['lat_max']}]"
+            )
     # Append _anom columns (only for vars with a `time` axis)
     for var in list(merged.data_vars):
         if "time" in merged[var].dims:
@@ -317,6 +346,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--end", default=None, help="Override config end-date (YYYY-MM)")
     args = parser.parse_args(argv)
 
+    import yaml  # CLI-only dep; keep loader/stage helpers importable without it
     cfg = yaml.safe_load(args.config.read_text())
     if args.end is not None:
         cfg["time"]["end"] = args.end
@@ -342,7 +372,7 @@ def main(argv: list[str] | None = None) -> int:
             if p.exists():
                 stage2[k] = p
     stage3 = _stage3_attribution(stage2, out_dir, args.force) if 3 in stages else out_dir / "data" / "smoke_attribution.nc"
-    merged = _stage4_merge(stage2, stage3, out_dir, args.force) if 4 in stages else out_dir / "data" / "merged.nc"
+    merged = _stage4_merge(stage2, stage3, out_dir, args.force, cfg=cfg) if 4 in stages else out_dir / "data" / "merged.nc"
     if 5 in stages:
         _stage5_regression(merged, cfg, out_dir, args.force)
     if 6 in stages:
