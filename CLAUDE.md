@@ -104,29 +104,22 @@ Study scope: regional monthly time series, CERES record (2000-03 → present). F
 
 ## Presentation plot set
 
-When any of these plot slugs is regenerated for either region, also copy
-the PNG and PDF to `~/Desktop/`, renamed to include the region:
+The curated figure pool for the presentation/paper lives on `~/Desktop/`,
+mirrored from `~/FIREX/output/<region>/plots/` with the region appended
+to each filename. Slugs (PNG + PDF for each region):
 
-- `aod_sfc`
-- `aod_sfc_all`
-- `aod_toa`
-- `aod_toa_all`
+- `aod_sfc`, `aod_sfc_all`
+- `aod_toa`, `aod_toa_all`
 - `qfed_smoke_aod`
 
-That is, after regen:
+After regenerating any of these, run:
 
 ```
-for region in pacific-northwest eastern-australia; do
-  for slug in aod_sfc aod_sfc_all aod_toa aod_toa_all qfed_smoke_aod; do
-    for ext in png pdf; do
-      cp ~/FIREX/output/$region/plots/$slug.$ext ~/Desktop/${slug}_${region}.$ext
-    done
-  done
-done
+~/FIREX/scripts/sync_presentation_plots.sh
 ```
 
-The Desktop set is the curated figure pool for the presentation/paper —
-keep it in lockstep with the latest output from `~/FIREX/output/`.
+The script is idempotent and reports missing sources. Edit it (not this
+section) when adding/removing slugs from the presentation set.
 
 ## Running a long transfer
 
