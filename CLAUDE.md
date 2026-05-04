@@ -102,6 +102,32 @@ Study scope: regional monthly time series, CERES record (2000-03 → present). F
 - Env-override fetcher parameters where reasonable (year range, species, dest path) so re-runs don't require code edits.
 - AMI transfers: AMI hostname / SSH config not yet captured — confirm before scripting AMI-side fetches.
 
+## Presentation plot set
+
+When any of these plot slugs is regenerated for either region, also copy
+the PNG and PDF to `~/Desktop/`, renamed to include the region:
+
+- `aod_sfc`
+- `aod_sfc_all`
+- `aod_toa`
+- `aod_toa_all`
+- `qfed_smoke_aod`
+
+That is, after regen:
+
+```
+for region in pacific-northwest eastern-australia; do
+  for slug in aod_sfc aod_sfc_all aod_toa aod_toa_all qfed_smoke_aod; do
+    for ext in png pdf; do
+      cp ~/FIREX/output/$region/plots/$slug.$ext ~/Desktop/${slug}_${region}.$ext
+    done
+  done
+done
+```
+
+The Desktop set is the curated figure pool for the presentation/paper —
+keep it in lockstep with the latest output from `~/FIREX/output/`.
+
 ## Running a long transfer
 
 For any transfer expected to run more than a few minutes, launch detached so it survives the terminal/session closing and the Mac going to sleep:
