@@ -417,6 +417,90 @@ def _plot_aod_sw_pair(ds: xr.Dataset, kind: str, output, sky: str = "clr") -> No
     save_figure(fig, output)
 
 
+def plot_smoke_radiative_efficiency(ds: xr.Dataset, output) -> None:
+    """1×2 clear-sky scatter: smoke AOD vs ΔF at SFC SW↓ and TOA SW.
+
+    Each panel shows OLS slope β (W m⁻² per AOD), standard error, n, R².
+    The same top-N peak smoke months from the timeseries plots are
+    labeled (4 for PNW, 5 for EAU)."""
+    smoke_cols = [c for c in
+                  ("smoke_aod_terra","smoke_aod_aqua",
+                   "smoke_aod_snpp","smoke_aod_noaa20") if c in ds]
+    if not smoke_cols:
+        return
+    smoke_da = xr.concat([ds[c] for c in smoke_cols], dim="src").mean("src")
+    smoke = smoke_da.values.astype(float)
+    times = pd.DatetimeIndex(smoke_da["time"].values)
+
+    panels = [
+        ("ceres_sfc_sw_down_clr_anom", "ΔF$_{SFC,SW↓}$ Clear-Sky"),
+        ("ceres_toa_sw_clr_anom",      "ΔF$_{TOA,SW}$ Clear-Sky"),
+    ]
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
+
+    top_n = 5 if ds.attrs.get("region") == "eastern-australia" else 4
+    peak_idx = (
+        pd.DataFrame({"time": times, "smoke": smoke})
+        .dropna(subset=["smoke"]).nlargest(top_n, "smoke").index.tolist()
+    )
+
+    for ax, (y_var, label) in zip(axes, panels):
+        if y_var not in ds:
+            ax.set_visible(False)
+            continue
+        y = ds[y_var].values.astype(float)
+        valid = np.isfinite(smoke) & np.isfinite(y)
+        x_v, y_v = smoke[valid], y[valid]
+        ax.scatter(x_v, y_v, s=14, alpha=0.5, color="black", zorder=2)
+        if x_v.size >= 3 and x_v.var() > 0:
+            slope, intercept = np.polyfit(x_v, y_v, 1)
+            yhat = slope * x_v + intercept
+            resid = y_v - yhat
+            sxx = ((x_v - x_v.mean()) ** 2).sum()
+            se = float(np.sqrt((resid ** 2).sum() / (x_v.size - 2) / sxx))
+            r2 = float(1 - (resid ** 2).sum() / ((y_v - y_v.mean()) ** 2).sum())
+            xs = np.linspace(0, x_v.max(), 50)
+            ax.plot(xs, slope * xs + intercept, color="black", lw=1.4, zorder=3)
+            ax.text(
+                0.05, 0.05,
+                f"β = {slope:.1f} ± {se:.1f} W m⁻²/AOD\nR² = {r2:.2f}\nn = {x_v.size}",
+                transform=ax.transAxes, va="bottom", fontsize=9,
+                bbox=dict(facecolor="white", alpha=0.85, edgecolor="none"),
+            )
+        # Label peak months. When two peaks share a similar y, stagger
+        # the labels above/below so they don't stack on the same line.
+        peak_xy = [(i, smoke[i], y[i]) for i in peak_idx
+                   if np.isfinite(smoke[i]) and np.isfinite(y[i])]
+        if peak_xy:
+            ymin, ymax = ax.get_ylim()
+            yrange = ymax - ymin if ymax > ymin else 1.0
+            threshold = 0.06 * yrange
+            order = sorted(range(len(peak_xy)), key=lambda k: peak_xy[k][2])
+            dy = [0] * len(peak_xy)
+            for rank in range(1, len(order)):
+                prev = order[rank - 1]
+                cur = order[rank]
+                if abs(peak_xy[cur][2] - peak_xy[prev][2]) < threshold:
+                    dy[cur] = -dy[prev] if dy[prev] != 0 else 9
+                else:
+                    dy[cur] = 0
+            for k, (i, xi, yi) in enumerate(peak_xy):
+                ax.annotate(
+                    pd.Timestamp(times[i]).strftime("%b %Y"),
+                    xy=(xi, yi),
+                    xytext=(7, dy[k]), textcoords="offset points",
+                    ha="left", va="center", fontsize=9, color="black",
+                    zorder=5,
+                )
+        ax.axhline(0, color="0.6", lw=0.5, zorder=1)
+        ax.set_xlabel("Smoke AOD 550 nm")
+        ax.set_ylabel(f"{label} (W m⁻²)")
+
+    fig.suptitle(f"Smoke Radiative Efficiency — {_region_label(ds)}")
+    fig.tight_layout()
+    save_figure(fig, output)
+
+
 def plot_qfed_vs_smoke_aod_scatter(ds: xr.Dataset, output) -> None:
     """Monthly scatter of QFED OC emission flux vs ensemble-mean smoke AOD.
 

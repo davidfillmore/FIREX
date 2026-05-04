@@ -37,6 +37,7 @@ plots:
   - aod_toa_all
   - qfed_smoke_aod
   - qfed_vs_smoke_aod_scatter
+  - smoke_radiative_efficiency
   - smoke_fraction_timeseries
   - smoke_aod_timeseries
   - ceres_toa_anomaly
