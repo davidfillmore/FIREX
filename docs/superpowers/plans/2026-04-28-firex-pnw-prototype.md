@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-04-28-firex-pnw-prototype-design.md`
 
+> **Note (2026-05):** the smoke-attribution code listings later in this plan describe the original `(BC + OC_bb_share · OC) / TOT` formulation with the `QFED_OC / (QFED_OC + DJF_baseline_OC)` fallback. That fallback was dimensionally broken (mixed kg m⁻² s⁻¹ with unitless AOD) and was replaced 2026-05 (commit `4e946cf`) by a per-month-of-year 10th-percentile baseline subtraction. See the spec §"Stage 3" for the current method. This plan is preserved as the historical record of the initial prototype.
+
 **Conventions in this plan:**
 - All `pytest` commands run from repo root (`~/FIREX/`).
 - All `git` commits use this format and never skip hooks:

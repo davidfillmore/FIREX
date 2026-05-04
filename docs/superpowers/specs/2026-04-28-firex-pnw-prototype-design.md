@@ -128,15 +128,21 @@ Each loader: open dataset → spatial subset → apply mask + area-weight → ti
 
 ### Stage 3 — Smoke attribution
 
-- Inputs: `merra2_aer.nc`, `modis_terra.nc`, `modis_aqua.nc`, `viirs_snpp.nc`, `viirs_noaa20.nc`, `qfed.nc`.
-- Compute:
+- Inputs: `merra2_aer.nc`, `modis_terra.nc`, `modis_aqua.nc`, `viirs_snpp.nc`, `viirs_noaa20.nc`, `qfed.nc` (the QFED file is carried for provenance — not used by the current method).
+- Compute, per region, per calendar month `m ∈ {1..12}`:
   ```
-  smoke_fraction = (BCEXTTAU + OC_bb_share · OCEXTTAU) / TOTEXTTAU
-  smoke_AOD_obs  = smoke_fraction × AOD_obs
+  BC_bg(m)            = quantile(BCEXTTAU, q=0.10) over all years for month m
+  OC_bg(m)            = quantile(OCEXTTAU, q=0.10) over all years for month m
+  smoke_AOD_merra2(t) = max(0, BCEXTTAU(t) − BC_bg(month_of(t)))
+                      + max(0, OCEXTTAU(t) − OC_bg(month_of(t)))
+  smoke_fraction(t)   = clip(smoke_AOD_merra2(t) / TOTEXTTAU(t), 0, 1)
+  smoke_AOD_obs(t)    = smoke_fraction(t) × AOD_obs(t)
   ```
-- `OC_bb_share` from `aer_Nx` if it carries the bb split; otherwise from `QFED_OC / (QFED_OC + DJF_baseline_OC)`, where `DJF_baseline_OC` is the per-gridcell mean of MERRA-2 `OCEXTTAU` over Dec/Jan/Feb across the full record (proxy for non-fire-season — i.e. anthropogenic + biogenic — OC). Fallback path emits a `WARNING` and writes `oc_split_method=fallback` on the output.
-- `smoke_AOD_obs` computed against each of MODIS Terra (primary), MODIS Aqua, VIIRS-SNPP, and VIIRS-NOAA20 — stored as separate variables (e.g., `smoke_aod_terra`, `smoke_aod_noaa20`).
-- Output: `data/smoke_attribution.nc`.
+- The 10th-percentile baseline is the ~3rd-lowest year per calendar month over a 26-yr record — a robust proxy for non-fire (anthropogenic + biogenic SOA) AOD that handles either hemisphere's fire season.
+- `smoke_AOD_obs` computed against each of MODIS Terra (primary), MODIS Aqua, VIIRS-SNPP, and VIIRS-NOAA20 — stored as separate variables (e.g., `smoke_aod_terra`, `smoke_aod_noaa20`). The MERRA-2-internal smoke AOD plus the per-month baselines are also written: `smoke_aod_merra2`, `merra2_bc_baseline`, `merra2_oc_baseline`.
+- Output: `data/smoke_attribution.nc` with `oc_split_method=baseline_subtraction_q0.10`.
+
+> **Why not the QFED-ratio fallback?** The original design (`smoke_fraction = (BC + OC_bb) / TOT` with `OC_bb_share = QFED_OC / (QFED_OC + DJF_baseline_OC)`) added a kg m⁻² s⁻¹ flux to a unitless AOD baseline. The QFED term was always ~10⁹× smaller, so `OC_bb_share ≈ 0` and `smoke_fraction` collapsed to `BC/TOT` (Sept 2020 PNW = 0.08 vs. the realistic ~0.81). The DJF baseline also doesn't generalize: in Eastern Australia DJF *is* the fire season. Replaced 2026-05 (commit `4e946cf`).
 
 ### Stage 4 — Merge + anomalies
 
@@ -188,7 +194,7 @@ NCAR palette (obs gray, model blue, accents orange/aqua). Every caption includes
 **Specific edge cases:**
 
 1. **MERRA-2 stream codes** — files may carry stream codes 100/200/300/400/401 for the same year/month. Loader globs and selects the highest-numbered stream available; logs the choice.
-2. **MERRA-2 OC bb-split absence** — if `OCEXTTAU_bb` is absent in `aer_Nx`, fall back to `OC_bb_share = QFED_OC / (QFED_OC + DJF_baseline_OC)`, where `DJF_baseline_OC` is the per-gridcell DJF mean of MERRA-2 `OCEXTTAU` over the full record. Emits a `WARNING` and writes `oc_split_method=fallback` on `data/smoke_attribution.nc`.
+2. **MERRA-2 OC bb-split absence** — `aer_Nx` carries only species totals; we do not look for `OCEXTTAU_bb`. Smoke attribution uses the per-month-of-year 10th-percentile baseline subtraction described in Stage 3. Output flag: `oc_split_method=baseline_subtraction_q0.10`.
 3. **VIIRS-NOAA20 starts 2018** — pre-2018 months are legitimately NaN; downstream code tolerates.
 4. **Y2016 QFED skipped** (per CLAUDE.md) — loader hard-skips with a logged note; QFED time-series has 12 NaNs; regression drops those rows.
 5. **MODIS Terra start** — common-record start computed as `max(dataset_start)`; CERES EBAF (2000-03) drives it.
@@ -198,7 +204,7 @@ NCAR palette (obs gray, model blue, accents orange/aqua). Every caption includes
 **Logging:**
 
 - One per-run log file at `output/pacific-northwest/logs/run_{timestamp}.log` (Python `logging`, level `INFO`).
-- Stage start/end with elapsed seconds; per-loader input file count and time range; warnings on fallback paths (#2, #4, #7).
+- Stage start/end with elapsed seconds; per-loader input file count and time range; warnings on fallback paths (#4, #7).
 - Header records git SHA of `~/FIREX/`, `davinci_monet.__version__`, conda env name, resolved bbox, time slice.
 
 **Idempotency:**
@@ -214,7 +220,7 @@ NCAR palette (obs gray, model blue, accents orange/aqua). Every caption includes
 |---|---|
 | `test_masks.py` | bbox → mask correctness; area-weight sums; lat/lon ordering invariance; mask written/read round-trip |
 | `test_loaders.py` | one synthetic-NetCDF fixture per dataset; assert returned shape + variable names; expected-failure cases for missing variables and empty time axis |
-| `test_attribution.py` | smoke fraction with known inputs; OC bb-split fallback path triggers when `OCEXTTAU_bb` absent; fallback flag set on output |
+| `test_attribution.py` | smoke fraction with known inputs; per-month-of-year baseline subtracts correctly; clipping to [0, 1] holds |
 | `test_anomaly.py` | climatology subtraction over a synthetic seasonal cycle; trend term recovery |
 | `test_regression.py` | OLS recovers known β within 2 SE on synthetic data; HAC SEs nonzero; month FE coefficients sum to ~0 |
 | `test_pipeline_smoke.py` | `@pytest.mark.slow`; runs all 6 stages on a 24-month subset of real `~/Data/...`; asserts each output NetCDF exists with non-empty time axis |
@@ -234,14 +240,14 @@ NCAR palette (obs gray, model blue, accents orange/aqua). Every caption includes
 | Primary radiative metric | clear-sky (with all-sky carried side-by-side) | direct-effect interpretability |
 | Anomaly handling | hybrid (climatology-subtracted for plots; raw + month FE + trend in regression) | intuitive plots, statistically clean regression |
 | Smoke-fraction obs source for primary plot | MODIS Terra | longest record overlapping CERES EBAF |
-| OC bb-share fallback | QFED-ratio with DJF-climatology anthro estimate | only invoked if `aer_Nx` lacks `OCEXTTAU_bb` |
+| OC / BC smoke split | per-month-of-year 10th-percentile baseline subtraction | dimensionally honest, hemisphere-agnostic; `aer_Nx` carries no bb split |
 | Peak fire year | auto-picked from QFED OC emissions | logged; overrideable |
 
 ## Open items deferred to implementation
 
 - Final variable-name mapping for CERES EBAF (the file has 247 variables across TOA/SFC and clear-sky/all-sky pairs); to be discovered while writing `loaders/ceres_ebaf.py` against the staged file.
 - Exact AERONET site list inside the PNW bbox — drawn from `~/Data/AeroNet/` at load time; expected to include Trinidad Head, Bondville (just outside), Railroad Valley.
-- Whether `OCEXTTAU_bb` is present in `MERRA2_*.tavgM_2d_aer_Nx*.nc4` — checked at first run; determines whether fallback is exercised.
+- ~~Whether `OCEXTTAU_bb` is present in `MERRA2_*.tavgM_2d_aer_Nx*.nc4`~~ — confirmed absent (`aer_Nx` carries species totals only); resolved via per-month-of-year baseline subtraction in `attribution.py`.
 
 ## References
 

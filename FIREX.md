@@ -40,14 +40,21 @@ Total observed AOD includes smoke + dust + sulfate + sea salt + nitrate. To isol
 
 ### Primary: MERRA-2 speciated AOD, scaled to observations
 
-MERRA-2 ingests QFED as its biomass-burning emission and runs full transport/aging chemistry. We trust MERRA-2's *fractional* species split more than its absolute AOD. So:
+MERRA-2 ingests QFED as its biomass-burning emission and runs full transport/aging chemistry. We trust MERRA-2's *fractional* species split more than its absolute AOD. The `aer_Nx` collection exposes only species totals (`BCEXTTAU`, `OCEXTTAU`, …) — there is no built-in biomass-burning split — so we approximate the smoke contribution with a per-month-of-year background subtraction:
 
 ```
-smoke_fraction(t, x, y)  =  (BCEXTTAU + OCEXTTAU_bb) / TOTEXTTAU
-smoke_AOD_obs(t, x, y)   =  smoke_fraction × MODIS_AOD_observed
+BC_bg(m)              =  10th-percentile of BCEXTTAU across all years for calendar month m
+OC_bg(m)              =  10th-percentile of OCEXTTAU across all years for calendar month m
+smoke_AOD_merra2(t)   =  max(0, BCEXTTAU(t) − BC_bg) + max(0, OCEXTTAU(t) − OC_bg)
+smoke_fraction(t)     =  smoke_AOD_merra2(t) / TOTEXTTAU(t),   clipped to [0, 1]
+smoke_AOD_obs(t)      =  smoke_fraction × AOD_observed
 ```
 
-with `OCEXTTAU_bb` = the biomass-burning portion of total OC AOD. MERRA-2 separates anthropogenic vs. biomass-burning OC in some collections; if the monthly `aer` we have doesn't carry the split, fall back to using QFED's local OC:BC emission ratio to apportion MERRA-2 OC.
+With ~26 yr of monthly data the 10th percentile is the ~3rd-lowest year per calendar month — a robust proxy for the non-fire (anthropogenic + biogenic SOA) baseline. The method:
+
+- is dimensionally honest (AOD − AOD; the earlier QFED-emission-flux fallback mixed kg m⁻² s⁻¹ with unitless AOD and collapsed `smoke_fraction` to BC/TOT — Sept 2020 PNW read 0.08 instead of ~0.81);
+- works in either hemisphere because the baseline is computed per region and per calendar month, so it tracks the local biogenic-OA seasonal cycle (DJF ≠ no-fire in EAU);
+- treats both BC and OC excess as smoke, which is appropriate for combustion-dominated fire events.
 
 This anchors the smoke time series in observed AOD while using MERRA-2 only for the speciation step.
 
