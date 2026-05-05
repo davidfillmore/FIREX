@@ -135,8 +135,7 @@ to each filename. Slugs (PNG + PDF for each region):
 - `aod_toa`, `aod_toa_all`
 - `qfed_smoke_aod`
 - `qfed_vs_smoke_aod_scatter`
-- `smoke_radiative_efficiency`, `smoke_radiative_efficiency_tertiles`
-- `qfed_daily_bursts`
+- `smoke_radiative_efficiency`
 - `region_map` (single file, region-agnostic — `output/region_map.{png,pdf}`)
 
 After regenerating any of these, run:

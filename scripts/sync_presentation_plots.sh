@@ -3,7 +3,7 @@
 # to ~/Desktop/ with the region appended to each filename. Idempotent.
 set -euo pipefail
 
-SLUGS=(aod_sfc aod_sfc_all aod_toa aod_toa_all qfed_smoke_aod qfed_vs_smoke_aod_scatter smoke_radiative_efficiency smoke_radiative_efficiency_tertiles qfed_daily_bursts)
+SLUGS=(aod_sfc aod_sfc_all aod_toa aod_toa_all qfed_smoke_aod qfed_vs_smoke_aod_scatter smoke_radiative_efficiency)
 REGIONS=(pacific-northwest eastern-australia)
 EXTS=(png pdf)
 
