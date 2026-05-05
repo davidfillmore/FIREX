@@ -108,11 +108,54 @@ The β we report is the OLS regression slope between monthly-mean smoke AOD and 
 - **Literature comparison.** Published clear-sky surface DRE efficiency for biomass-burning aerosol is typically −50 to −70 W m⁻² per AOD; our PNW/EAU values of ~ −40 sit slightly low, consistent with monthly-aggregation dampening.
 - **Communication.** Frame β in the talk as a "monthly-aggregated regression slope," not a per-event radiative efficiency. The two have different physical meanings even when the linear approximation is good.
 
-Mitigation paths, increasing in cost:
+### Mitigation paths
 
-1. Frame the metric honestly. Adds a sentence; eliminates a likely audience question.
-2. Composite contrast: top-N fire months mean ΔF vs non-fire months mean ΔF, report (ΔΔF / Δsmoke_AOD). Same data; fewer hidden assumptions than a 26-yr OLS.
-3. Move to daily data: CERES SYN1deg (daily 1° SW) + MODIS L3 daily AOD. Real fix; non-trivial loader and storage work; useful even for ~10 fire-active years.
+#### 1. QFED-OC tertile split (no extra data; uses existing monthly merged.nc)
+
+Bin months by QFED OC into low/mid/high tertiles and re-fit the OLS slope per tertile. If β shifts systematically with fire intensity, that's empirical evidence of within-month nonlinearity (saturation would make β shallower at high intensity; "purer smoke" would make it steeper).
+
+Surface clear-sky result (W m⁻² per AOD, R² in parens, n ≈ 100 each):
+
+| Region | Low QFED | Mid QFED | High QFED | All-record |
+|---|---:|---:|---:|---:|
+| Pacific Northwest | −33 (0.02) | −39 (0.34) | **−44 (0.64)** | −39 (0.44) |
+| Eastern Australia | −243 (0.23)* | −203 (0.28)* | **−45 (0.30)** | −42 (0.15) |
+
+\* EAU low/mid slopes are unstable because the within-tertile AOD range is too narrow; treat the high-tertile slope as the credible number.
+
+Two takeaways: (i) the signal lives in fire-active months; (ii) high-intensity β is *steeper* than overall β, which rules out saturation/concavity as the dominant nonlinearity (plausibly the smoke fraction is "cleaner" at high intensity, less contaminated by non-smoke AOD).
+
+#### 2. Daily-QFED duty-cycle correction (uses staged daily QFED)
+
+For each top fire month, compute an effective active-day fraction `f_eff` from the daily QFED OC time series using a Herfindahl-style concentration index:
+
+```
+p_d   = q_d / Σ q   (daily emission share)
+H     = Σ p_d²       (Herfindahl index)
+f_eff = (1/H) / n_days
+```
+
+`f_eff = 1` for uniform emission, small for one big day. If we then assume the per-day response is `ΔF = β_event · A^p` with `p ∈ [0.8, 1.0]`, monthly aggregation gives:
+
+```
+β_naive = β_event · (mean A within month)^(p-1)
+       ≈ β_event · f_eff^(1-p)        (assuming AOD ∝ daily emission)
+```
+
+so `β_event = β_naive · (1/f_eff)^(1-p)`.
+
+Median `f_eff` across the labeled top fire months: **0.58 (PNW), 0.50 (EAU)**. Bracket on the corrected surface clear-sky efficiency:
+
+| Region | p=1.00 | p=0.95 | p=0.90 | p=0.85 | p=0.80 |
+|---|---:|---:|---:|---:|---:|
+| PNW | −39 | −40 | −41 | −43 | −44 |
+| EAU | −43 | −44 | −46 | −47 | −49 |
+
+The correction is modest (a few W m⁻² per AOD) for plausible p; published per-event values of −50 to −70 are not reached without a stronger nonlinearity assumption *or* moving to daily data.
+
+#### 3. Daily data (future work)
+
+CERES SYN1deg (daily 1° SW) + MODIS L3 daily AOD + daily MERRA-2. Non-trivial loader + storage work; QFED is already daily on disk. A scoped first pass would target a single fire-active year per region (e.g. 2020 PNW, 2019-20 EAU) to compute per-event β directly.
 
 ### Other open methodological choices
 
