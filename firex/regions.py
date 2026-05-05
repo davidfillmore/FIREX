@@ -1,11 +1,12 @@
 """Region definitions for FIREX analyses.
 
-The full registry includes regions slated for future analysis. Three are
+The full registry includes regions slated for future analysis. Four are
 *featured* — the story arc for the current presentation:
 
 - pacific-northwest    (2017 / 2018 / 2020 / 2021 fire seasons)
 - eastern-canada       (2023 Quebec/Ontario record boreal season)
 - eastern-australia    (2019-20 Black Summer)
+- eastern-siberia      (2019 / 2021 Yakutia megafires)
 
 Featured regions render in orange on the region map; the others are
 drawn in grey and pulled into the analysis pipeline only when added to
@@ -51,6 +52,12 @@ REGIONS: dict[str, Region] = {
         featured=True,
         description="2019-20 Black Summer (VIC/TAS/NSW/ACT/SE-QLD)",
     ),
+    "eastern-siberia": Region(
+        name="eastern-siberia",
+        lon_min=110.0, lon_max=155.0, lat_min=55.0, lat_max=72.0,
+        featured=True,
+        description="2019 / 2021 Yakutia megafires",
+    ),
 
     # ── Future-analysis pool ──────────────────────────────────────────
     "western-canada": Region(
@@ -67,11 +74,6 @@ REGIONS: dict[str, Region] = {
         name="california",
         lon_min=-124.0, lon_max=-114.0, lat_min=32.0, lat_max=42.0,
         description="2018 Camp; 2020 Creek and August Complex",
-    ),
-    "eastern-siberia": Region(
-        name="eastern-siberia",
-        lon_min=110.0, lon_max=155.0, lat_min=55.0, lat_max=72.0,
-        description="2019 / 2021 Yakutia megafires",
     ),
     "central-africa": Region(
         name="central-africa",

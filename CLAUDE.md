@@ -104,7 +104,7 @@ Study scope: regional monthly time series, CERES record (2000-03 → present). F
 
 ## Regions
 
-The full registry lives in `firex/regions.py`. Three regions are *featured*
+The full registry lives in `firex/regions.py`. Four regions are *featured*
 (highlighted orange on the region map and form the current presentation
 arc); the rest are defined but only enter the analysis pipeline when added
 to a config. Editing this table without also updating the dataclass — or
@@ -115,10 +115,10 @@ vice versa — drifts the docs from the code; keep them in sync.
 | pacific-northwest | 130°W–110°W, 42°N–52°N | ★ | 2017 / 2018 / 2020 / 2021 fire seasons |
 | eastern-canada | 90°W–65°W, 48°N–58°N | ★ | 2023 Quebec/Ontario record boreal season |
 | eastern-australia | 140°E–154°E, 44°S–25°S | ★ | 2019-20 Black Summer (incl. Tasmania) |
+| eastern-siberia | 110°E–155°E, 55°N–72°N | ★ | 2019 / 2021 Yakutia megafires |
 | western-canada | 130°W–105°W, 52°N–62°N |  | 2023 NWT/BC; Yellowknife evacuation |
 | alaska | 165°W–141°W, 60°N–72°N |  | 2004 record, 2022 boreal |
 | california | 124°W–114°W, 32°N–42°N |  | 2018 Camp; 2020 Creek + August Complex |
-| eastern-siberia | 110°E–155°E, 55°N–72°N |  | 2019 / 2021 Yakutia megafires |
 | central-africa | 15°E–35°E, 15°S–5°N |  | World's largest savanna BB region by area |
 | amazon | 75°W–50°W, 15°S–5°S |  | Deforestation arc; 2019 / 2023 |
 | maritime-se-asia | 95°E–120°E, 5°S–5°N |  | Indonesian peat fires; 2015 ENSO |
