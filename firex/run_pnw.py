@@ -314,6 +314,10 @@ def _stage6_plots(cfg: dict, merged_path: Path, out_dir: Path, force: bool) -> N
             lambda: plots.plot_qfed_vs_smoke_aod_scatter(merged, plots_dir / "qfed_vs_smoke_aod_scatter.png"),
         "smoke_radiative_efficiency":
             lambda: plots.plot_smoke_radiative_efficiency(merged, plots_dir / "smoke_radiative_efficiency.png"),
+        "smoke_radiative_efficiency_tertiles":
+            lambda: plots.plot_smoke_radiative_efficiency_tertiles(merged, plots_dir / "smoke_radiative_efficiency_tertiles.png"),
+        "qfed_daily_bursts":
+            lambda: plots.plot_qfed_daily_bursts(merged, plots_dir / "qfed_daily_bursts.png"),
         "smoke_fraction_timeseries":
             lambda: plots.plot_smoke_fraction_timeseries(merged, plots_dir / "smoke_fraction_timeseries.png"),
         "smoke_aod_timeseries":
