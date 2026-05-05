@@ -100,10 +100,25 @@ Fit:
 
 Coefficient `b` (W m⁻² per unit AOD) is the regional radiative-efficiency of smoke.
 
-Open methodological choices:
+### Caveat: monthly-mean regression vs. per-event radiative efficiency
+
+The β we report is the OLS regression slope between monthly-mean smoke AOD and monthly-mean ΔF. That is not the same quantity as a per-day or per-hour direct radiative-efficiency. Three places this matters:
+
+- **Aggregation bias.** If the AOD↔ΔF relationship is at all nonlinear (saturation at high optical depth, sec(θ)-driven solar-zenith dependence, surface-albedo modulation), then `mean(f(x)) ≠ f(mean(x))`. Within-month variance is high during fire months — a 5-day plume embedded in 25 clean days — so the monthly mean dilutes both AOD and ΔF, and our β is a regression of dilution against dilution. Tends to bias β low relative to peak-day β.
+- **Literature comparison.** Published clear-sky surface DRE efficiency for biomass-burning aerosol is typically −50 to −70 W m⁻² per AOD; our PNW/EAU values of ~ −40 sit slightly low, consistent with monthly-aggregation dampening.
+- **Communication.** Frame β in the talk as a "monthly-aggregated regression slope," not a per-event radiative efficiency. The two have different physical meanings even when the linear approximation is good.
+
+Mitigation paths, increasing in cost:
+
+1. Frame the metric honestly. Adds a sentence; eliminates a likely audience question.
+2. Composite contrast: top-N fire months mean ΔF vs non-fire months mean ΔF, report (ΔΔF / Δsmoke_AOD). Same data; fewer hidden assumptions than a 26-yr OLS.
+3. Move to daily data: CERES SYN1deg (daily 1° SW) + MODIS L3 daily AOD. Real fix; non-trivial loader and storage work; useful even for ~10 fire-active years.
+
+### Other open methodological choices
+
 - Linear regression vs. partial-correlation / multi-variate ridge.
 - Whether to detrend / deseasonalize first, or include month-of-year fixed effects.
-- All-sky vs. clear-sky CERES (cloud-aerosol interactions complicate interpretation in all-sky).
+- All-sky vs. clear-sky CERES (cloud-aerosol interactions complicate interpretation in all-sky; cloud-fraction residualization in the current pipeline tightens the time series cosmetically but does not recover a clean smoke signal in the smoke-vs-ΔF scatter).
 - Lagged AOD (smoke days persist into following month) — revisit after looking at autocorrelation.
 
 ## Validation
