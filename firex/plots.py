@@ -133,6 +133,23 @@ def _region_label(ds: xr.Dataset) -> str:
     return raw.replace("-", " ").title() if raw else "?"
 
 
+_QFED_BAD_YEARS = (2017,)
+
+
+def _mask_bad_qfed(ds: xr.Dataset) -> xr.Dataset:
+    """Mask QFED variables to NaN in known-bad years (Y2017 ships byte-
+    identical daily files in the local archive). MERRA-2-derived smoke
+    fields are unaffected and stay intact. See CLAUDE.md §Datasets."""
+    qfed_vars = [v for v in ds.data_vars if v.startswith("qfed_")]
+    if not qfed_vars:
+        return ds
+    years = ds["time"].dt.year
+    bad = years.isin(list(_QFED_BAD_YEARS))
+    return ds.assign({
+        v: ds[v].where(~bad) for v in qfed_vars
+    })
+
+
 def _annotate_caption(fig, ds: xr.Dataset, methods: str = "") -> None:
     """Footer was redundant with title + axes; keep tight_layout only."""
     fig.tight_layout()
@@ -552,12 +569,165 @@ def plot_smoke_radiative_efficiency(ds: xr.Dataset, output) -> None:
     save_figure(fig, output)
 
 
+def plot_smoke_radiative_efficiency_tertiles(ds: xr.Dataset, output) -> None:
+    """1×2 clear-sky scatter (SFC, TOA) of smoke AOD vs ΔF, with points
+    color-coded by QFED-OC tertile and separate OLS slopes per tertile.
+
+    Visualizes the within-record variation of β with fire intensity:
+    saturation would flatten the slope at high QFED; "cleaner smoke
+    fraction" steepens it. PNW shows the latter (β_high ≈ −44 vs all-
+    record −39); EAU's low/mid slopes are unstable due to narrow AOD
+    range and should be read as cautionary, not interpretive.
+    """
+    ds = _mask_bad_qfed(ds)
+    smoke_cols = [c for c in
+                  ("smoke_aod_terra","smoke_aod_aqua",
+                   "smoke_aod_snpp","smoke_aod_noaa20") if c in ds]
+    if not smoke_cols or "qfed_oc" not in ds:
+        return
+    smoke_da = xr.concat([ds[c] for c in smoke_cols], dim="src").mean("src")
+    smoke = smoke_da.values.astype(float)
+    qfed = ds["qfed_oc"].values.astype(float)
+
+    panels = [
+        ("ceres_sfc_sw_down_clr_anom", "ΔF$_{SFC,SW↓}$ Clear-Sky"),
+        ("ceres_toa_sw_clr_anom",      "ΔF$_{TOA,SW}$ Clear-Sky"),
+    ]
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
+
+    tertiles = [
+        ("Low",  NCAR_COLORS["aqua"],      "--", 1.1),
+        ("Mid",  NCAR_COLORS["ncar_blue"], "-",  1.4),
+        ("High", NCAR_COLORS["red"],       "-",  2.0),
+    ]
+
+    for ax, (y_var, label) in zip(axes, panels):
+        if y_var not in ds:
+            ax.set_visible(False)
+            continue
+        y = ds[y_var].values.astype(float)
+        valid = np.isfinite(smoke) & np.isfinite(y) & np.isfinite(qfed)
+        s, yy, q = smoke[valid], y[valid], qfed[valid]
+        if s.size < 30:
+            continue
+        q_lo, q_hi = np.percentile(q, [33.33, 66.67])
+        bins = [
+            ("Low",  q < q_lo),
+            ("Mid",  (q >= q_lo) & (q < q_hi)),
+            ("High", q >= q_hi),
+        ]
+        legend_lines = []
+        for (name, color, linestyle, lw), (_, mask) in zip(tertiles, bins):
+            xs, ys = s[mask], yy[mask]
+            ax.scatter(xs, ys, s=14, alpha=0.55, color=color, zorder=2)
+            if xs.size < 5 or xs.var() < 1e-12:
+                continue
+            slope, intercept = np.polyfit(xs, ys, 1)
+            yhat = slope * xs + intercept
+            r2 = float(1 - ((ys - yhat) ** 2).sum() /
+                       ((ys - ys.mean()) ** 2).sum()) if ys.var() > 0 else 0.0
+            xline = np.linspace(0, xs.max(), 50)
+            ax.plot(xline, slope * xline + intercept,
+                    color=color, lw=lw, linestyle=linestyle, zorder=3,
+                    label=f"{name}: β={slope:.0f}, R²={r2:.2f}, n={xs.size}")
+        ax.axhline(0, color="0.6", lw=0.5, zorder=1)
+        ax.set_xlabel("Smoke AOD 550 nm")
+        ax.set_ylabel(f"{label} (W m⁻²)")
+        ax.legend(fontsize=8, loc="lower left", title="QFED OC tertile",
+                  title_fontsize=8)
+
+    fig.suptitle(f"Smoke Radiative Efficiency by QFED Tertile — {_region_label(ds)}")
+    fig.tight_layout()
+    save_figure(fig, output)
+
+
+def plot_qfed_daily_bursts(ds: xr.Dataset, output) -> None:
+    """Daily QFED OC time series within each top fire month; reads the
+    raw daily QFED NetCDFs from `~/Data/QFED/Y{YYYY}/M{MM}/`.
+
+    Shows the within-month concentration that motivates the duty-cycle
+    correction in §"Caveat" of FIREX.md. Annotates each panel with
+    f_eff = (1/Σpᵢ²) / n_days.
+    """
+    smoke_cols = [c for c in
+                  ("smoke_aod_terra","smoke_aod_aqua",
+                   "smoke_aod_snpp","smoke_aod_noaa20") if c in ds]
+    if not smoke_cols:
+        return
+    smoke_da = xr.concat([ds[c] for c in smoke_cols], dim="src").mean("src")
+    times = pd.DatetimeIndex(smoke_da["time"].values)
+    smoke = smoke_da.values.astype(float)
+    top_n = 5 if ds.attrs.get("region") == "eastern-australia" else 4
+    # Skip top fire months in Y2017 — local QFED 2017 archive is corrupt
+    # (see CLAUDE.md). Keeps the burst panel from rendering empty bars.
+    candidates = pd.DataFrame({"time": times, "smoke": smoke}).dropna(subset=["smoke"])
+    candidates = candidates[~candidates["time"].dt.year.isin(_QFED_BAD_YEARS)]
+    df = candidates.nlargest(top_n, "smoke").sort_values("time")
+    if df.empty:
+        return
+
+    bbox = ds.attrs.get("bbox", "")
+    # Parse bbox attr "lon[a,b] lat[c,d]"
+    import re
+    m = re.match(r"lon\[([-\d.]+),([-\d.]+)\] lat\[([-\d.]+),([-\d.]+)\]", bbox)
+    if not m:
+        return
+    lon_min, lon_max, lat_min, lat_max = map(float, m.groups())
+
+    qfed_root = Path.home() / "Data" / "QFED"
+
+    n = len(df)
+    fig, axes = plt.subplots(1, n, figsize=(3.2 * n, 3.6), sharey=True)
+    if n == 1:
+        axes = [axes]
+    for ax, (_, row) in zip(axes, df.iterrows()):
+        t = pd.Timestamp(row.time)
+        files = sorted(
+            (qfed_root / f"Y{t.year}" / f"M{t.month:02d}").glob(
+                f"qfed2.emis_oc.061.{t.year}{t.month:02d}*.nc4"))
+        if not files:
+            ax.text(0.5, 0.5, "no QFED daily", ha="center", va="center",
+                    transform=ax.transAxes)
+            continue
+        days, vals = [], []
+        for f in files:
+            sds = xr.open_dataset(f)
+            sub = sds["biomass"].sel(
+                lat=slice(lat_min, lat_max), lon=slice(lon_min, lon_max))
+            mean = float(sub.weighted(np.cos(np.deg2rad(sub.lat)))
+                            .mean(("lat", "lon")).values[0])
+            days.append(pd.Timestamp(sds.time.values[0]).floor("D"))
+            vals.append(mean)
+        s = pd.Series(vals, index=days)
+        # f_eff
+        total = s.sum()
+        if total > 0:
+            p = s / total
+            H = (p ** 2).sum()
+            f_eff = (1 / H) / len(s)
+        else:
+            f_eff = float("nan")
+        ax.bar(s.index, s.values, color=NCAR_COLORS["orange"],
+               edgecolor="0.3", lw=0.4, width=0.85)
+        ax.set_title(t.strftime("%b %Y"), fontsize=10)
+        ax.set_xlabel("Day")
+        ax.text(0.97, 0.95, f"f_eff = {f_eff:.2f}",
+                transform=ax.transAxes, ha="right", va="top", fontsize=9,
+                bbox=dict(facecolor="white", alpha=0.85, edgecolor="none"))
+        ax.tick_params(axis="x", rotation=30, labelsize=7)
+    axes[0].set_ylabel("Daily QFED OC (kg m⁻² s⁻¹)")
+    fig.suptitle(f"Daily QFED OC Bursts in Top Fire Months — {_region_label(ds)}")
+    fig.tight_layout()
+    save_figure(fig, output)
+
+
 def plot_qfed_vs_smoke_aod_scatter(ds: xr.Dataset, output) -> None:
     """Monthly scatter of QFED OC emission flux vs ensemble-mean smoke AOD.
 
     Uses black dots/line (instead of the NCAR palette) and labels the
     same top-N peak smoke months as the timeseries plots.
     """
+    ds = _mask_bad_qfed(ds)
     smoke_cols = [c for c in
                   ("smoke_aod_terra","smoke_aod_aqua",
                    "smoke_aod_snpp","smoke_aod_noaa20") if c in ds]
@@ -615,6 +785,7 @@ def plot_qfed_vs_smoke_aod_scatter(ds: xr.Dataset, output) -> None:
 
 def plot_qfed_smoke_aod(ds: xr.Dataset, output) -> None:
     """2-panel: QFED OC + BC (twinx) on top; total AOD + smoke AOD spreads below."""
+    ds = _mask_bad_qfed(ds)
     fig, axes = plt.subplots(
         2, 1, figsize=(11, 8), sharex=True,
         gridspec_kw={"height_ratios": [1, 1.3]},
@@ -709,6 +880,7 @@ def plot_seasonal_climatology(ds: xr.Dataset, output) -> None:
 
 
 def plot_qfed_emissions_timeseries(ds: xr.Dataset, output) -> None:
+    ds = _mask_bad_qfed(ds)
     fig, axes = plt.subplots(3, 1, figsize=(10, 7), sharex=True)
     main_color = NCAR_COLORS["ncar_blue"]
     aod_color = NCAR_COLORS["aqua"]

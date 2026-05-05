@@ -114,14 +114,14 @@ The β we report is the OLS regression slope between monthly-mean smoke AOD and 
 
 Bin months by QFED OC into low/mid/high tertiles and re-fit the OLS slope per tertile. If β shifts systematically with fire intensity, that's empirical evidence of within-month nonlinearity (saturation would make β shallower at high intensity; "purer smoke" would make it steeper).
 
-Surface clear-sky result (W m⁻² per AOD, R² in parens, n ≈ 100 each):
+Surface clear-sky result (W m⁻² per AOD, R² in parens, n ≈ 95 each, Y2017 QFED masked — see CLAUDE.md §Datasets):
 
 | Region | Low QFED | Mid QFED | High QFED | All-record |
 |---|---:|---:|---:|---:|
-| Pacific Northwest | −33 (0.02) | −39 (0.34) | **−44 (0.64)** | −39 (0.44) |
-| Eastern Australia | −243 (0.23)* | −203 (0.28)* | **−45 (0.30)** | −42 (0.15) |
+| Pacific Northwest | −33 (0.02)* | −77 (0.19)* | **−44 (0.64)** | −39 (0.44) |
+| Eastern Australia | −278 (0.30)* | −218 (0.28)* | **−45 (0.31)** | −42 (0.15) |
 
-\* EAU low/mid slopes are unstable because the within-tertile AOD range is too narrow; treat the high-tertile slope as the credible number.
+\* Low/mid tertile slopes are unstable: the within-tertile smoke-AOD range is too narrow to fit reliably and the slopes wander widely (±50 W m⁻² per AOD) between specifications. Treat the high-tertile slope as the credible number.
 
 Two takeaways: (i) the signal lives in fire-active months; (ii) high-intensity β is *steeper* than overall β, which rules out saturation/concavity as the dominant nonlinearity (plausibly the smoke fraction is "cleaner" at high intensity, less contaminated by non-smoke AOD).
 

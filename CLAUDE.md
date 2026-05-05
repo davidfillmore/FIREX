@@ -39,7 +39,7 @@ Wildfire analysis with global atmospheric models and observational datasets.
 
 | Dataset | Local path | Source | Status |
 |---|---|---|---|
-| QFED v2.6r1 (biomass-burning emissions) | `~/Data/QFED/Y{YYYY}/M{MM}/` | `portal.nccs.nasa.gov/datashare/iesa/aerosol/emissions/QFED/v2.6r1/0.25/QFED/` | Fetched 2000–2015, 2017 → present (7 species: bc/oc/pm25/co/so2/no/nh3) via `scripts/fetch_qfed.sh`. **Y2016 deliberately skipped**: NCCS reprocessed Y2016 on 2025-03-19 with files inflated to 16.7 MB each (vs ~300 KB for adjacent years) — likely an erroneous regeneration; revisit if/when NCCS publishes a corrected Y2016. 0.25°×0.3125° MERRA-2 grid. Each file has `biomass` + biome breakdown (`_tf`, `_xf`, `_sv`, `_gl`). |
+| QFED v2.6r1 (biomass-burning emissions) | `~/Data/QFED/Y{YYYY}/M{MM}/` | `portal.nccs.nasa.gov/datashare/iesa/aerosol/emissions/QFED/v2.6r1/0.25/QFED/` | Fetched 2000–2015, 2017 → present (7 species: bc/oc/pm25/co/so2/no/nh3) via `scripts/fetch_qfed.sh`. **Y2016 deliberately skipped**: NCCS reprocessed Y2016 on 2025-03-19 with files inflated to 16.7 MB each (vs ~300 KB for adjacent years) — likely an erroneous regeneration; revisit if/when NCCS publishes a corrected Y2016. **Y2017 known-bad**: every daily file for 2017 contains the same `biomass` array (verified — `np.array_equal` across days), so the daily series is a placeholder/static repeat and the monthly mean is meaningless. Cause unclear (fetch error, NCCS source issue, or local archive replacement). The `_mask_bad_qfed` helper in `firex/plots.py` masks Y2017 QFED-* variables to NaN at plot time as a workaround. Refetch from NCCS to fix properly. 0.25°×0.3125° MERRA-2 grid. Each file has `biomass` + biome breakdown (`_tf`, `_xf`, `_sv`, `_gl`). |
 | MERRA-2 monthly 2D (tavgM) | `~/Data/MERRA2_tavgM/{coll}_Nx/` | GES DISC (`~/.netrc`) via `scripts/fetch_merra2_monthly.sh` | Default coll: `aer` (others available via `MERRA2_COLLECTIONS`). aer_Nx pre-existing 200001–202312 (288 files, ~31 GB), being extended to present. Stream codes 100/200/300/400 by year, 401 fallback for NRT. aer ~59 MB/file; slv ~51, lnd ~18, flx ~52. **No 2D monthly chm** — only model-level (M2I3NVCHM daily) or pressure-level (M2TMNPCHM monthly 3D). |
 | MERRA-2 daily (cataloged, not staged) | — | `/ASDC_archive/GMAO/MERRA2/{YYYY}/{MM}/` (AMI) | 14 daily collections, 1980–present. Fire-relevant 2D: `tavg1_2d_{aer,slv,lnd,flx}_Nx`. 3D: `inst3_3d_aer_Nv`, `inst3_3d_chm_Nv`. ~2 TB/yr fire subset — won't fit current free disk. |
 | MODIS C6.1 monthly L3 (Terra + Aqua) | `~/Data/{MOD08_M3,MYD08_M3}/` (flat) | LAADS (`~/.laads_token`) via `scripts/fetch_modis_monthly.sh` | Terra MOD08_M3 (2000-02→) + Aqua MYD08_M3 (2002-07→). ~385 MB/file. Existing 2000-02→2023-03 already on disk; fetcher backfills 2023-04→present. |
@@ -135,7 +135,8 @@ to each filename. Slugs (PNG + PDF for each region):
 - `aod_toa`, `aod_toa_all`
 - `qfed_smoke_aod`
 - `qfed_vs_smoke_aod_scatter`
-- `smoke_radiative_efficiency`
+- `smoke_radiative_efficiency`, `smoke_radiative_efficiency_tertiles`
+- `qfed_daily_bursts`
 - `region_map` (single file, region-agnostic — `output/region_map.{png,pdf}`)
 
 After regenerating any of these, run:
