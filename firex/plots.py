@@ -417,6 +417,57 @@ def _plot_aod_sw_pair(ds: xr.Dataset, kind: str, output, sky: str = "clr") -> No
     save_figure(fig, output)
 
 
+def plot_region_map(output, regions=None) -> None:
+    """Global PlateCarree map with all FIREX region boxes.
+
+    Featured regions (the story arc) are filled semi-transparent orange
+    with a label; the rest are drawn as thin dark-grey outlines with a
+    smaller label, marking them as future-analysis candidates.
+    """
+    from firex.regions import REGIONS
+    if regions is None:
+        regions = REGIONS
+
+    fig = plt.figure(figsize=(14, 6.8))
+    ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
+    ax.set_global()
+    ax.coastlines(linewidth=0.4, color="0.4")
+    ax.add_feature(cfeature.LAND, facecolor="0.96", zorder=0)
+    ax.add_feature(cfeature.OCEAN, facecolor="white", zorder=0)
+    ax.gridlines(draw_labels=False, linewidth=0.3, color="0.85", zorder=1)
+
+    featured_color = NCAR_COLORS["orange"]
+    for r in regions.values():
+        lons = [r.lon_min, r.lon_max, r.lon_max, r.lon_min, r.lon_min]
+        lats = [r.lat_min, r.lat_min, r.lat_max, r.lat_max, r.lat_min]
+        if r.featured:
+            ax.fill(lons, lats, color=featured_color, alpha=0.35,
+                    transform=ccrs.PlateCarree(), zorder=3)
+            ax.plot(lons, lats, color=featured_color, lw=1.5,
+                    transform=ccrs.PlateCarree(), zorder=4)
+            ax.text(
+                (r.lon_min + r.lon_max) / 2, (r.lat_min + r.lat_max) / 2,
+                r.name.replace("-", " ").title(),
+                transform=ccrs.PlateCarree(),
+                ha="center", va="center", fontsize=10, fontweight="bold",
+                color="0.1", zorder=5,
+            )
+        else:
+            ax.plot(lons, lats, color="0.35", lw=0.9, linestyle="-",
+                    transform=ccrs.PlateCarree(), zorder=2)
+            label = r.name.replace("-", " ").title().replace(" Se ", " SE ")
+            ax.text(
+                (r.lon_min + r.lon_max) / 2, (r.lat_min + r.lat_max) / 2,
+                label,
+                transform=ccrs.PlateCarree(),
+                ha="center", va="center", fontsize=7, color="0.25", zorder=2,
+            )
+
+    fig.suptitle("FIREX Regions")
+    fig.tight_layout()
+    save_figure(fig, output)
+
+
 def plot_smoke_radiative_efficiency(ds: xr.Dataset, output) -> None:
     """1×2 clear-sky scatter: smoke AOD vs ΔF at SFC SW↓ and TOA SW.
 

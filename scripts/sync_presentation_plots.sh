@@ -28,6 +28,19 @@ for region in "${REGIONS[@]}"; do
   done
 done
 
+# Region map is region-agnostic; one copy at the top level of output/.
+for ext in "${EXTS[@]}"; do
+  src="${src_root}/region_map.${ext}"
+  out="${dst}/region_map.${ext}"
+  if [[ -f "$src" ]]; then
+    cp "$src" "$out"
+    copied=$((copied + 1))
+  else
+    echo "missing: $src" >&2
+    missing=$((missing + 1))
+  fi
+done
+
 echo "synced ${copied} files to ${dst}"
 if (( missing > 0 )); then
   echo "warning: ${missing} expected sources were missing" >&2

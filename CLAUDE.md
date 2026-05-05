@@ -102,6 +102,29 @@ Study scope: regional monthly time series, CERES record (2000-03 → present). F
 - Env-override fetcher parameters where reasonable (year range, species, dest path) so re-runs don't require code edits.
 - AMI transfers: AMI hostname / SSH config not yet captured — confirm before scripting AMI-side fetches.
 
+## Regions
+
+The full registry lives in `firex/regions.py`. Three regions are *featured*
+(highlighted orange on the region map and form the current presentation
+arc); the rest are defined but only enter the analysis pipeline when added
+to a config. Editing this table without also updating the dataclass — or
+vice versa — drifts the docs from the code; keep them in sync.
+
+| Region | bbox (lon, lat) | Featured | Notes |
+|---|---|:---:|---|
+| pacific-northwest | 130°W–110°W, 42°N–52°N | ★ | 2017 / 2018 / 2020 / 2021 fire seasons |
+| eastern-canada | 90°W–65°W, 48°N–58°N | ★ | 2023 Quebec/Ontario record boreal season |
+| eastern-australia | 140°E–154°E, 44°S–25°S | ★ | 2019-20 Black Summer (incl. Tasmania) |
+| western-canada | 130°W–105°W, 52°N–62°N |  | 2023 NWT/BC; Yellowknife evacuation |
+| alaska | 165°W–141°W, 60°N–72°N |  | 2004 record, 2022 boreal |
+| california | 124°W–114°W, 32°N–42°N |  | 2018 Camp; 2020 Creek + August Complex |
+| eastern-siberia | 110°E–155°E, 55°N–72°N |  | 2019 / 2021 Yakutia megafires |
+| central-africa | 15°E–35°E, 15°S–5°N |  | World's largest savanna BB region by area |
+| amazon | 75°W–50°W, 15°S–5°S |  | Deforestation arc; 2019 / 2023 |
+| maritime-se-asia | 95°E–120°E, 5°S–5°N |  | Indonesian peat fires; 2015 ENSO |
+| northern-australia | 125°E–145°E, 20°S–10°S |  | Annual dry-season savanna |
+| mediterranean | 10°W–30°E, 35°N–45°N |  | Greece / Spain / Portugal recurring |
+
 ## Presentation plot set
 
 The curated figure pool for the presentation/paper lives on `~/Desktop/`,
@@ -113,6 +136,7 @@ to each filename. Slugs (PNG + PDF for each region):
 - `qfed_smoke_aod`
 - `qfed_vs_smoke_aod_scatter`
 - `smoke_radiative_efficiency`
+- `region_map` (single file, region-agnostic — `output/region_map.{png,pdf}`)
 
 After regenerating any of these, run:
 

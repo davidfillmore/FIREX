@@ -14,9 +14,23 @@ Key quantities we want to produce per region:
 ## Study domain
 
 - **Time:** 2000-03 → present, monthly. Constrained by CERES EBAF start.
-- **Regions:** TBD; first candidate is **Pacific Northwest** (heavy seasonal smoke, mid-latitude, well-instrumented). Other candidates worth visiting: California, Boreal Canada, Boreal Russia / Siberia, Amazon, Indonesia/Maritime Continent, Southeast Australia, Southern Africa.
 - **Spatial scale:** regional monthly means (single time series per region) is the primary unit. 1°×1° gridded fields are the working layer; regional masks aggregate to time series.
-- **Boundaries:** TBD — leaning on standard fire-research regions (GFED14 basis regions are a common choice and aligned with the literature) supplemented by U.S.-specific MTBS-aligned regions.
+- **Regions:** the registry below covers the major biomass-burning biomes globally. Three are *featured* — the story arc for the current presentation; the others are defined for future analysis. Bboxes are loose enough to capture transport receptors as well as source areas. Definitive entries live in `firex/regions.py`; this table mirrors them.
+
+| Region | bbox (lon, lat) | Featured | Notes |
+|---|---|:---:|---|
+| pacific-northwest | 130°W–110°W, 42°N–52°N | ★ | 2017 / 2018 / 2020 / 2021 fire seasons |
+| eastern-canada | 90°W–65°W, 48°N–58°N | ★ | 2023 Quebec/Ontario record boreal season; smoke into eastern US |
+| eastern-australia | 140°E–154°E, 44°S–25°S | ★ | 2019-20 Black Summer (VIC/TAS/NSW/ACT/SE-QLD) |
+| western-canada | 130°W–105°W, 52°N–62°N |  | 2023 NWT/BC; Yellowknife evacuation |
+| alaska | 165°W–141°W, 60°N–72°N |  | 2004 record season, 2022 boreal |
+| california | 124°W–114°W, 32°N–42°N |  | 2018 Camp; 2020 Creek and August Complex |
+| eastern-siberia | 110°E–155°E, 55°N–72°N |  | 2019 / 2021 Yakutia megafires |
+| central-africa | 15°E–35°E, 15°S–5°N |  | World's largest savanna BB region by area |
+| amazon | 75°W–50°W, 15°S–5°S |  | Deforestation arc; 2019 / 2023 events |
+| maritime-se-asia | 95°E–120°E, 5°S–5°N |  | Indonesian peat fires; 2015 ENSO event |
+| northern-australia | 125°E–145°E, 20°S–10°S |  | Annual dry-season savanna burning |
+| mediterranean | 10°W–30°E, 35°N–45°N |  | Recurring Greece / Spain / Portugal fires |
 
 ## Dataset roles
 
