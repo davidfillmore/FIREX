@@ -1,16 +1,23 @@
-"""Annotated region map with per-region key statistics.
+"""Annotated region map + RESULTS.md with per-region key statistics.
 
 For each region, compute from `output/<region>/data/merged.nc`:
-  - η_SFC: OLS slope of `ceres_sfc_sw_down_clr_anom` on mean smoke AOD
-    (W m⁻² per AOD), with 1σ standard error
+  - η_SFC and η_TOA: OLS slopes of clear-sky SW anomalies on ensemble-
+    mean smoke AOD (W m⁻² per AOD), with 1σ standard error, computed
+    independently from CERES EBAF (`ceres_*_clr_anom`) and from MERRA-2
+    rad (`merra2_rad_SW{GDN,TNT}CLR_anom`). MERRA-2 SWTNT is net-down
+    at TOA, so we flip its sign to share CERES outgoing convention:
+    +ΔF_TOA = more outgoing SW = cooling.
   - peak smoke AOD and the year it occurred
   - count of months with smoke AOD ≥ 50% of peak
 
 Render a global PlateCarree map with all region boxes drawn equally
-(no orange highlight) and a 3-line stats block placed near each box.
+(no orange highlight) and a stats block placed near each box.
 Per-region placement nudges live in `LAYOUT` below — edit there when
-the region set or layout changes. Output:
-`output/region_map_stats.{png,pdf}`.
+the region set or layout changes.
+
+Outputs:
+  - `output/region_map_stats.{png,pdf}` — annotated map
+  - `RESULTS.md` (repo root) — summary table, git-tracked
 
 Invoke from the davinci-monet env (sarb also works — only needs
 xarray + cartopy + the davinci_monet style hook):
@@ -39,6 +46,17 @@ from firex.regions import REGIONS  # noqa: E402
 SMOKE_SRCS = ("smoke_aod_terra", "smoke_aod_aqua",
               "smoke_aod_snpp", "smoke_aod_noaa20")
 
+# (label, response variable, sign multiplier).
+# MERRA-2 SWTNT* is net-down (positive into earth); CERES TOA SW is
+# upward outgoing (positive cooling). Flip the MERRA-2 TOA response
+# so the η_TOA columns are directly comparable across both records.
+RESPONSES = (
+    ("eta_sfc_ceres",  "ceres_sfc_sw_down_clr_anom", +1),
+    ("eta_sfc_merra2", "merra2_rad_SWGDNCLR_anom",   +1),
+    ("eta_toa_ceres",  "ceres_toa_sw_clr_anom",      +1),
+    ("eta_toa_merra2", "merra2_rad_SWTNTCLR_anom",   -1),
+)
+
 # Per-region placement overrides for the stats block. Edit when the
 # region set or layout drifts. Default: anchor to the left of the box
 # (lon_min − 1.5°, vertical box centre), right-aligned.
@@ -58,6 +76,19 @@ LAYOUT = {
 }
 
 
+def _ols_slope_se(x: np.ndarray, y: np.ndarray) -> tuple[float, float] | None:
+    """OLS slope + 1σ standard error on a single predictor. None if
+    underdetermined (n < 3 or zero variance in x)."""
+    if x.size < 3 or x.var() == 0:
+        return None
+    slope, intercept = np.polyfit(x, y, 1)
+    yhat = slope * x + intercept
+    resid = y - yhat
+    sxx = ((x - x.mean()) ** 2).sum()
+    se = float(np.sqrt((resid ** 2).sum() / (x.size - 2) / sxx))
+    return float(slope), se
+
+
 def compute_stats(ds: xr.Dataset) -> dict | None:
     smoke_cols = [c for c in SMOKE_SRCS if c in ds]
     if not smoke_cols:
@@ -74,39 +105,107 @@ def compute_stats(ds: xr.Dataset) -> dict | None:
     peak_year = int(times[peak_idx].year)
     n_near_peak = int(np.sum(smoke[valid] >= 0.5 * peak_aod))
 
-    eta = eta_se = None
-    y_var = "ceres_sfc_sw_down_clr_anom"
-    if y_var in ds:
-        y = ds[y_var].values.astype(float)
-        v2 = valid & np.isfinite(y)
-        x_v, y_v = smoke[v2], y[v2]
-        if x_v.size >= 3 and x_v.var() > 0:
-            slope, intercept = np.polyfit(x_v, y_v, 1)
-            yhat = slope * x_v + intercept
-            resid = y_v - yhat
-            sxx = ((x_v - x_v.mean()) ** 2).sum()
-            se = float(np.sqrt((resid ** 2).sum() / (x_v.size - 2) / sxx))
-            eta, eta_se = float(slope), se
-    return {
-        "eta": eta, "eta_se": eta_se,
+    out: dict = {
         "peak_aod": peak_aod, "peak_year": peak_year,
         "n_near_peak": n_near_peak,
     }
+    for key, y_var, sign in RESPONSES:
+        if y_var not in ds:
+            out[key] = None
+            continue
+        y = sign * ds[y_var].values.astype(float)
+        v2 = valid & np.isfinite(y)
+        fit = _ols_slope_se(smoke[v2], y[v2])
+        out[key] = fit  # (slope, se) or None
+    return out
+
+
+def _fmt_eta_pair(ceres, merra2) -> str:
+    """Format a 'Z±W / Z±W' string (CERES / M2 by position; legend on figure)."""
+    parts = []
+    for fit in (ceres, merra2):
+        parts.append("n/a" if fit is None else f"{fit[0]:+.1f}±{fit[1]:.1f}")
+    return " / ".join(parts)
 
 
 def fmt_block(stats: dict | None) -> str:
+    """Map block: SFC efficiency only (TOA stays in RESULTS.md)."""
     if stats is None:
         return "no data"
-    if stats["eta"] is None:
-        eta_line = "η$_{SFC}$: n/a"
-    else:
-        eta_line = (f"η$_{{SFC}}$ = {stats['eta']:.1f} ± "
-                    f"{stats['eta_se']:.1f} W m⁻²/τ")
+    sfc = _fmt_eta_pair(stats["eta_sfc_ceres"], stats["eta_sfc_merra2"])
     return (
-        f"{eta_line}\n"
-        f"peak τ$_{{smoke}}$ = {stats['peak_aod']:.2f} ({stats['peak_year']})\n"
-        f"n ≥ 50% peak: {stats['n_near_peak']}"
+        f"η$_{{SFC}}$: {sfc}\n"
+        f"τ$_{{peak}}$ {stats['peak_aod']:.2f} ({stats['peak_year']})  "
+        f"n≥50%: {stats['n_near_peak']}"
     )
+
+
+def _md_eta(fit) -> str:
+    if fit is None:
+        return "n/a"
+    return f"{fit[0]:+.1f} ± {fit[1]:.1f}"
+
+
+def write_results_md(region_stats: dict, out_path: Path) -> None:
+    """Emit a git-trackable summary table mirroring the map's stats."""
+    # Featured first (preserving REGIONS order), then the rest.
+    ordered = [n for n, r in REGIONS.items() if r.featured] + \
+              [n for n, r in REGIONS.items() if not r.featured]
+
+    lines: list[str] = []
+    lines.append("# FIREX Results Summary")
+    lines.append("")
+    lines.append(
+        "Regional smoke radiative-efficiency and AOD statistics, computed from "
+        "`output/<region>/data/merged.nc` over the CERES record (2000-03 → present)."
+    )
+    lines.append(
+        "Featured regions (★) form the current presentation arc; the remaining "
+        "regions are defined for future analysis."
+    )
+    lines.append("")
+    lines.append(
+        "Efficiency η is the OLS slope of the clear-sky SW anomaly on the "
+        "ensemble-mean smoke AOD (mean of MODIS Terra/Aqua + VIIRS SNPP/NOAA-20 "
+        "smoke AODs), in W m⁻² per unit AOD, with 1σ standard error. Both CERES "
+        "EBAF and MERRA-2 rad fluxes are reported. MERRA-2 SWTNT (net-down) is "
+        "negated so SFC and TOA share the CERES outgoing convention: "
+        "+ΔF$_{TOA}$ = more outgoing SW = cooling, −ΔF$_{SFC}$ = surface dimming."
+    )
+    lines.append("")
+    lines.append(
+        "This file is auto-generated by `scripts/region_map_stats.py` — "
+        "do not hand-edit. Re-run the script after refreshing merged.nc."
+    )
+    lines.append("")
+    lines.append(
+        "| Region | Peak τ$_{smoke}$ (year) | n ≥ 50% peak | "
+        "η$_{SFC}$ CERES | η$_{SFC}$ MERRA-2 | "
+        "η$_{TOA}$ CERES | η$_{TOA}$ MERRA-2 |"
+    )
+    lines.append(
+        "|---|---:|---:|---:|---:|---:|---:|"
+    )
+    for name in ordered:
+        r = REGIONS[name]
+        s = region_stats.get(name)
+        label = name.replace("-", " ").title()
+        if r.featured:
+            label += " ★"
+        if s is None:
+            lines.append(f"| {label} | — | — | — | — | — | — |")
+            continue
+        lines.append(
+            f"| {label} "
+            f"| {s['peak_aod']:.2f} ({s['peak_year']}) "
+            f"| {s['n_near_peak']} "
+            f"| {_md_eta(s['eta_sfc_ceres'])} "
+            f"| {_md_eta(s['eta_sfc_merra2'])} "
+            f"| {_md_eta(s['eta_toa_ceres'])} "
+            f"| {_md_eta(s['eta_toa_merra2'])} |"
+        )
+    lines.append("")
+    out_path.write_text("\n".join(lines))
 
 
 def main() -> int:
@@ -173,6 +272,18 @@ def main() -> int:
                           edgecolor="0.65", lw=0.4, pad=2.5),
                 zorder=4)
 
+    # Single global legend explaining the η_SFC number ordering. Avoids
+    # repeating "CERES / M2" inside every per-region block.
+    ax.text(
+        0.005, 0.012,
+        "η$_{SFC}$ values: CERES / MERRA-2  (W m⁻² per unit AOD; clear-sky)",
+        transform=ax.transAxes, ha="left", va="bottom", fontsize=9,
+        color="0.15",
+        bbox=dict(facecolor="white", alpha=0.92,
+                  edgecolor="0.55", lw=0.5, pad=3.0),
+        zorder=5,
+    )
+
     fig.suptitle(
         "FIREX Regions — Smoke Radiative Efficiency & AOD Statistics",
         fontsize=12,
@@ -181,6 +292,10 @@ def main() -> int:
     out = output_root / "region_map_stats.png"
     plots.save_figure(fig, out)
     print(f"wrote {out} (and .pdf)")
+
+    md_path = Path(__file__).resolve().parents[1] / "RESULTS.md"
+    write_results_md(region_stats, md_path)
+    print(f"wrote {md_path}")
     return 0
 
 
