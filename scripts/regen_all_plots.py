@@ -37,6 +37,8 @@ PRESENTATION_SLUGS = [
     "qfed_smoke_aod",
     "qfed_vs_smoke_aod_scatter",
     "smoke_radiative_efficiency",
+    "dF_sfc_compare",
+    "dF_toa_compare",
 ]
 
 
@@ -56,6 +58,10 @@ def _plot_fns(merged: xr.Dataset, plots_dir: Path) -> dict:
             lambda: plots.plot_qfed_vs_smoke_aod_scatter(merged, plots_dir / "qfed_vs_smoke_aod_scatter.png"),
         "smoke_radiative_efficiency":
             lambda: plots.plot_smoke_radiative_efficiency(merged, plots_dir / "smoke_radiative_efficiency.png"),
+        "dF_sfc_compare":
+            lambda: plots.plot_dF_sfc_compare(merged, plots_dir / "dF_sfc_compare.png"),
+        "dF_toa_compare":
+            lambda: plots.plot_dF_toa_compare(merged, plots_dir / "dF_toa_compare.png"),
     }
 
 

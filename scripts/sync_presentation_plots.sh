@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
-# Mirror the curated presentation plot set from ~/FIREX/output/<region>/plots/
-# to ~/Desktop/ with the region appended to each filename. Idempotent.
+# Stage a subset of plots from ~/FIREX/output/<region>/plots/ to ~/Desktop/
+# with the region appended to each filename. SLUGS is the *active review
+# queue*, not a canonical mirror — once a slug is approved, remove it
+# from SLUGS so future syncs don't re-stage it. The canonical copy lives
+# in ~/FIREX/output/<region>/plots/. See CLAUDE.md §"Presentation plot
+# set" for the workflow. Idempotent.
 set -euo pipefail
 
-SLUGS=(aod_sfc aod_sfc_all aod_toa aod_toa_all qfed_smoke_aod qfed_vs_smoke_aod_scatter smoke_radiative_efficiency)
-REGIONS=(pacific-northwest eastern-australia)
+SLUGS=(dF_sfc_compare dF_toa_compare)
+REGIONS=(pacific-northwest eastern-canada eastern-australia eastern-siberia)
 EXTS=(png pdf)
 
 src_root="${HOME}/FIREX/output"

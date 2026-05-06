@@ -127,25 +127,39 @@ vice versa — drifts the docs from the code; keep them in sync.
 
 ## Presentation plot set
 
-The curated figure pool for the presentation/paper lives on `~/Desktop/`,
-mirrored from `~/FIREX/output/<region>/plots/` with the region appended
-to each filename. Slugs (PNG + PDF for each region):
+Canonical store: `~/FIREX/output/<region>/plots/` — `scripts/regen_all_plots.py`
+renders the curated figure pool here for every region. Slugs (PNG + PDF
+per region):
 
 - `aod_sfc`, `aod_sfc_all`
 - `aod_toa`, `aod_toa_all`
 - `qfed_smoke_aod`
 - `qfed_vs_smoke_aod_scatter`
 - `smoke_radiative_efficiency`
+- `dF_sfc_compare`, `dF_toa_compare` (CERES-vs-MERRA-2 ΔF, clear-sky)
 - `region_map` (single file, region-agnostic — `output/region_map.{png,pdf}`)
 
-After regenerating any of these, run:
+`~/Desktop/` is a **review staging area**, not a canonical mirror.
+`scripts/sync_presentation_plots.sh` copies a curated subset (its
+`SLUGS` array — the *active review queue*) to Desktop with the region
+appended to each filename. Desktop copies are throwaway: the canonical
+copy in the FIREX folder is the source of truth. `REGIONS` in the sync
+script chooses which featured regions get staged (currently the four
+featured regions).
 
-```
-~/FIREX/scripts/sync_presentation_plots.sh
-```
+Workflow for adding or modifying a slug:
 
-The script is idempotent and reports missing sources. Edit it (not this
-section) when adding/removing slugs from the presentation set.
+1. Add the slug to `PRESENTATION_SLUGS` + `_plot_fns` in
+   `scripts/regen_all_plots.py` so it renders for every region.
+2. Add it to `SLUGS` in `scripts/sync_presentation_plots.sh` so it
+   lands on Desktop for review.
+3. Run `scripts/regen_all_plots.py` (renders to FIREX folder) then
+   `scripts/sync_presentation_plots.sh` (mirrors to Desktop).
+4. Review on Desktop. When the plot is approved, delete the staged
+   files from Desktop and remove the slug from `SLUGS` in the sync
+   script — the canonical copy in `~/FIREX/output/<region>/plots/`
+   stays put, but the slug exits the review queue and won't re-stage
+   on the next sync.
 
 ## Running a long transfer
 
