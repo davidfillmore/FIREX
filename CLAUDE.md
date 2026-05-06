@@ -173,3 +173,26 @@ nohup caffeinate -i ~/FIREX/scripts/fetch_<dataset>.sh \
 Verify it's truly detached: `ps -o ppid= -p <PID>` should print `1` (reparented to launchd).
 
 Monitor: `tail -f ~/Data/<DATASET>/_fetch_<dataset>.log`. Stop: `pkill -f fetch_<dataset>.sh` (lockfile auto-cleans via EXIT trap).
+
+## External-drive sync (Io)
+
+`/Volumes/Io` is an external exFAT drive used as a portable backup of
+locally fetched datasets plus the FIREX merged outputs. Run
+`scripts/sync_to_io.sh` after a new fetch or regen to keep Io current.
+
+Layout on Io:
+
+- `/Volumes/Io/<DATASET>/` mirrors `~/Data/<DATASET>/` for QFED, VIIRS,
+  MERRA2_tavgM, MOD08_M3, MYD08_M3, and Optics.
+- `/Volumes/Io/FIREX/<region>/data/merged.nc` mirrors
+  `~/FIREX/output/<region>/data/merged.nc`. Region list is
+  auto-discovered from the local glob — adding a region locally is
+  picked up on the next sync without script edits.
+
+The script is idempotent (rsync delta), holds a lockfile, and uses
+exFAT-safe flags: `-rltDv --modify-window=1 --human-readable --stats`
+(no permissions/owner/group preservation — exFAT can't store them).
+Logs to `/Volumes/Io/_sync_to_io.log`. Launch detached using the same
+`nohup caffeinate -i … &` pattern as the fetchers if the run is
+expected to take more than a few minutes (large initial mirror or
+many newly-fetched files).
