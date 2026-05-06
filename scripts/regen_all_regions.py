@@ -33,6 +33,7 @@ BASE_PATHS = {
     "viirs_noaa20": "~/Data/VIIRS/AERDB_M3_VIIRS_NOAA20",
     "merra2_aer":   "~/Data/MERRA2_tavgM/aer_Nx",
     "merra2_slv":   "~/Data/MERRA2_tavgM/slv_Nx",
+    "merra2_rad":   "~/Data/MERRA2_tavgM/rad_Nx",
     "qfed":         "~/Data/QFED",
     "aeronet":      "~/Data/AeroNet",
 }

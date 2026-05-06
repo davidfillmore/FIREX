@@ -11,6 +11,13 @@ _COLLECTION_VARS: dict[str, list[str]] = {
     "slv": ["T2M", "TQV", "PBLH"],
     "flx": ["HFLUX", "EFLUX", "USTAR"],
     "lnd": ["GWETROOT", "RUNOFF"],
+    # rad = M2TMNXRAD radiation diagnostics. SW{GDN,TNT}{,CLR} are the SFC+TOA
+    # SW analogues to CERES sfc_sw_down_{all,clr_t}_mon and toa_sw_{all,clr_t}_mon
+    # respectively. Note SWTNT* is *net-down* at TOA (positive into earth);
+    # CERES toa_sw_*_mon is upward outgoing — flip sign at plot time when
+    # comparing the two side-by-side.
+    "rad": ["SWGDN", "SWGDNCLR", "SWTNT", "SWTNTCLR",
+            "LWGAB", "LWGABCLR", "LWTUP", "LWTUPCLR", "CLDTOT"],
 }
 
 

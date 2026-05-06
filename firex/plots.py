@@ -304,132 +304,289 @@ def _three_panel_anomaly(ds, prefix: str, label: str, output) -> None:
     save_figure(fig, output)
 
 
-def _plot_aod_sw_pair(ds: xr.Dataset, kind: str, output, sky: str = "clr") -> None:
-    """2-panel: total AOD on top; SW (clear- or all-sky) anomaly + smoke AOD (twinx) below."""
+def _sw_anom_series(
+    ds: xr.Dataset, kind: str, sky: str, flux_source: str,
+) -> tuple[xr.DataArray | None, str]:
+    """Return the SW anomaly series and a short flux-source label.
+
+    `flux_source="ceres"` reads `ceres_*_anom`. `flux_source="merra2"` reads
+    `merra2_rad_SW*_anom`; for `kind="toa"` the MERRA-2 series is *negated*
+    (SWTNT is net-down at TOA whereas CERES TOA SW is upward outgoing) so
+    the two read with the same convention: positive ΔF = more outgoing SW.
+    """
+    if flux_source == "ceres":
+        if kind == "sfc":
+            name = f"ceres_sfc_sw_down_{sky}_anom"
+        else:
+            name = f"ceres_toa_sw_{sky}_anom"
+        return (ds[name] if name in ds else None), "CERES"
+    if flux_source == "merra2":
+        if kind == "sfc":
+            name = "merra2_rad_SWGDN_anom" if sky == "all" else "merra2_rad_SWGDNCLR_anom"
+            da = ds[name] if name in ds else None
+        else:
+            name = "merra2_rad_SWTNT_anom" if sky == "all" else "merra2_rad_SWTNTCLR_anom"
+            da = -ds[name] if name in ds else None
+        return da, "MERRA-2"
+    raise ValueError(f"flux_source must be 'ceres' or 'merra2', got {flux_source!r}")
+
+
+def _smoke_series(
+    ds: xr.Dataset, smoke_source: str,
+) -> tuple[xr.DataArray | None, str]:
+    """Return the smoke-AOD series and its legend label."""
+    if smoke_source == "platform_ensemble":
+        cols = [c for c in
+                ("smoke_aod_terra","smoke_aod_aqua","smoke_aod_snpp","smoke_aod_noaa20")
+                if c in ds]
+        if not cols:
+            return None, "Smoke AOD"
+        return (xr.concat([ds[c] for c in cols], dim="src").mean("src"),
+                "Smoke AOD (obs ensemble)")
+    if smoke_source == "merra2":
+        return (ds["smoke_aod_merra2"] if "smoke_aod_merra2" in ds else None,
+                "Smoke AOD (MERRA-2)")
+    raise ValueError(f"smoke_source must be 'platform_ensemble' or 'merra2', got {smoke_source!r}")
+
+
+def _render_smoke_twinx(
+    ax_a, ds: xr.Dataset, smoke: xr.DataArray, smoke_label: str,
+    sw_for_peaks: xr.DataArray | None,
+    pos_color: str, neg_color: str,
+) -> object:
+    """Twin axis with smoke AOD + top-N smoke-peak markers + month labels.
+
+    `sw_for_peaks` is the ΔF series whose value at each peak month gets a
+    color-coded marker (blue if positive, orange if negative). Pass the
+    primary CERES line in compare plots so peak markers track the
+    observational reference.
+    """
+    ax_s = ax_a.twinx()
+    smoke_color = "black"
+    ax_s.plot(ds["time"], smoke, lw=1.2, color=smoke_color, alpha=0.9,
+              label=smoke_label)
+    ax_s.set_ylabel("Smoke AOD 550 nm", color=smoke_color)
+    ax_s.tick_params(axis="y", colors=smoke_color)
+    # Layer smoke beneath the SW anomaly: drop the twin axis below the
+    # primary, then make the primary's face transparent so smoke shows
+    # through. (matplotlib draws twinx on top by default — zorder alone
+    # isn't enough.)
+    ax_s.set_zorder(ax_a.get_zorder() - 1)
+    ax_a.patch.set_alpha(0.0)
+
+    # Mark the four highest-smoke-AOD months in the record. Label each
+    # smoke marker with the year; mirror the marker on the SW-anomaly
+    # trace in orange/blue depending on sign.
+    smoke_vals = smoke.values
+    years = pd.DatetimeIndex(smoke["time"].values).year
+    sw_vals = (sw_for_peaks.values if sw_for_peaks is not None
+               else np.full_like(smoke_vals, np.nan))
+    df = pd.DataFrame({"time": smoke["time"].values, "smoke": smoke_vals,
+                       "sw": sw_vals, "year": years})
+    # EAU's Black Summer (Dec 2019 + Jan 2020) takes two of the top slots,
+    # so bump to 5 there to keep four distinct fire events labeled.
+    top_n = 5 if ds.attrs.get("region") == "eastern-australia" else 4
+    peaks = df.dropna(subset=["smoke"]).nlargest(top_n, "smoke").sort_values("time")
+    if not peaks.empty:
+        import matplotlib.dates as mdates
+        from matplotlib.transforms import blended_transform_factory
+        trans_smoke = blended_transform_factory(ax_a.transData, ax_s.transData)
+        peak_xnum = mdates.date2num(peaks["time"].values)
+        ax_a.scatter(peak_xnum, peaks["smoke"], s=42, facecolor="black",
+                     edgecolor="white", linewidths=0.6,
+                     transform=trans_smoke, zorder=20, clip_on=False)
+        for x_num, row in zip(peak_xnum, peaks.itertuples(index=False)):
+            label = pd.Timestamp(row.time).strftime("%b %Y")
+            ax_a.annotate(
+                label, xy=(x_num, row.smoke),
+                xycoords=trans_smoke,
+                xytext=(6, 0), textcoords="offset points",
+                ha="left", va="center", fontsize=8, color="black",
+                zorder=21, clip_on=False,
+            )
+        valid_sw = peaks.dropna(subset=["sw"])
+        if not valid_sw.empty:
+            sw_colors = [pos_color if v >= 0 else neg_color for v in valid_sw["sw"]]
+            ax_a.scatter(valid_sw["time"], valid_sw["sw"], s=42,
+                         facecolor=sw_colors,
+                         edgecolor="white", linewidths=0.6, zorder=20)
+    return ax_s
+
+
+def _plot_aod_sw_pair(
+    ds: xr.Dataset, kind: str, output, sky: str = "clr",
+    flux_source: str = "ceres", smoke_source: str = "platform_ensemble",
+    show_aod_panel: bool = True,
+) -> None:
+    """SW (clear- or all-sky) anomaly + smoke AOD on twinx, optionally with
+    a top total-AOD panel.
+
+    `flux_source` selects the SW anomaly dataset (CERES or MERRA-2 rad);
+    `smoke_source` selects the smoke-AOD trace (per-platform ensemble or
+    MERRA-2-internal smoke_aod_merra2). When `show_aod_panel=False`, the
+    figure collapses to a single panel — useful when an AOD timeseries is
+    already shown elsewhere.
+    """
     if sky not in ("clr", "all"):
         raise ValueError(f"sky must be 'clr' or 'all', got {sky!r}")
     sky_label = "Clear-Sky" if sky == "clr" else "All-Sky"
+    sw_series, flux_label = _sw_anom_series(ds, kind, sky, flux_source)
     if kind == "sfc":
-        clr_var = f"ceres_sfc_sw_down_{sky}_anom"
-        ylabel_anom = f"ΔF$_{{SFC,SW↓}}$ {sky_label} (W m⁻²)"
+        ylabel_anom = f"ΔF$_{{SFC,SW↓}}$ {sky_label} ({flux_label}, W m⁻²)"
         title_tag = "Surface"
     elif kind == "toa":
-        clr_var = f"ceres_toa_sw_{sky}_anom"
-        ylabel_anom = f"ΔF$_{{TOA,SW}}$ {sky_label} (W m⁻²)"
+        ylabel_anom = f"ΔF$_{{TOA,SW}}$ {sky_label} ({flux_label}, W m⁻²)"
         title_tag = "TOA"
     else:
         raise ValueError(f"kind must be 'sfc' or 'toa', got {kind!r}")
 
-    fig, axes = plt.subplots(
-        2, 1, figsize=(11, 9), sharex=True,
-        gridspec_kw={"height_ratios": [1, 1.6]},
-    )
+    if show_aod_panel:
+        fig, axes = plt.subplots(
+            2, 1, figsize=(11, 9), sharex=True,
+            gridspec_kw={"height_ratios": [1, 1.6]},
+        )
+        ax = axes[0]
+        sat_series = [
+            ("modis_terra_aod", "MODIS Terra", NCAR_COLORS["ncar_blue"]),
+            ("modis_aqua_aod", "MODIS Aqua", NCAR_COLORS["aqua"]),
+            ("viirs_snpp_aod", "VIIRS-SNPP", NCAR_COLORS["orange"]),
+            ("viirs_noaa20_aod", "VIIRS-NOAA20", NCAR_COLORS["purple"]),
+        ]
+        present = [(v, lbl, c) for v, lbl, c in sat_series if v in ds]
+        if present:
+            ensemble = xr.concat([ds[v] for v, _, _ in present], dim="src").mean("src")
+            _plot_annual_bars(ax, ensemble, NCAR_COLORS["gray"])
+            for var, label, color in present:
+                ax.plot(ds["time"], ds[var], label=label, lw=1.0, color=color, zorder=2)
+        if "merra2_aer_TOTEXTTAU" in ds:
+            ax.plot(ds["time"], ds["merra2_aer_TOTEXTTAU"], label="MERRA-2 TOT",
+                    lw=1.4, color=NCAR_COLORS["red"], zorder=3)
+        ax.set_ylabel("Total AOD 550 nm")
+        ax.legend(fontsize=8, loc="upper left", ncol=2)
+        ax_a = axes[1]
+        last_ax = axes[-1]
+    else:
+        fig, ax_a = plt.subplots(1, 1, figsize=(11, 5))
+        last_ax = ax_a
 
-    # Top: total AOD.
-    ax = axes[0]
-    sat_series = [
-        ("modis_terra_aod", "MODIS Terra", NCAR_COLORS["ncar_blue"]),
-        ("modis_aqua_aod", "MODIS Aqua", NCAR_COLORS["aqua"]),
-        ("viirs_snpp_aod", "VIIRS-SNPP", NCAR_COLORS["orange"]),
-        ("viirs_noaa20_aod", "VIIRS-NOAA20", NCAR_COLORS["purple"]),
-    ]
-    present = [(v, lbl, c) for v, lbl, c in sat_series if v in ds]
-    if present:
-        ensemble = xr.concat([ds[v] for v, _, _ in present], dim="src").mean("src")
-        _plot_annual_bars(ax, ensemble, NCAR_COLORS["gray"])
-        for var, label, color in present:
-            ax.plot(ds["time"], ds[var], label=label, lw=1.0, color=color, zorder=2)
-    if "merra2_aer_TOTEXTTAU" in ds:
-        ax.plot(ds["time"], ds["merra2_aer_TOTEXTTAU"], label="MERRA-2 TOT",
-                lw=1.4, color=NCAR_COLORS["red"], zorder=3)
-    ax.set_ylabel("Total AOD 550 nm")
-    ax.legend(fontsize=8, loc="upper left", ncol=2)
-
-    # Bottom: SW anomaly + smoke AOD on twinx.
-    ax_a = axes[1]
     # Positive ΔF in blue, negative in orange — orange marks dimming/cooling
     # so it visually pairs with the smoke peaks.
     pos_color = NCAR_COLORS["ncar_blue"]
     neg_color = NCAR_COLORS["orange"]
-    if clr_var in ds:
-        _plot_anomaly_fill(ax_a, ds["time"].values, ds[clr_var].values,
+    if sw_series is not None:
+        _plot_anomaly_fill(ax_a, ds["time"].values, sw_series.values,
                            pos_color, neg_color)
-        line_anom, = ax_a.plot(ds["time"], ds[clr_var], lw=1.2,
-                               color=NCAR_COLORS["red"], zorder=3,
-                               label=f"ΔF {sky_label}")
+        ax_a.plot(ds["time"], sw_series, lw=1.2,
+                  color=NCAR_COLORS["red"], zorder=3,
+                  label=f"ΔF {sky_label} ({flux_label})")
     ax_a.set_ylabel(ylabel_anom)
     if kind == "sfc":
         # Invert so dimming (negative ΔF) reads "up" — visually aligns with
-        # the AOD spikes in the panel above.
+        # the AOD spikes in the panel above (or in the AOD plot pair when
+        # the top panel is suppressed).
         ax_a.invert_yaxis()
 
-    # Smoke AOD: ensemble mean of per-platform smoke_aod_*.
-    smoke_cols = [c for c in
-                  ("smoke_aod_terra","smoke_aod_aqua","smoke_aod_snpp","smoke_aod_noaa20")
-                  if c in ds]
-    if smoke_cols:
-        smoke = xr.concat([ds[c] for c in smoke_cols], dim="src").mean("src")
-        ax_s = ax_a.twinx()
-        smoke_color = "black"
-        line_smoke, = ax_s.plot(ds["time"], smoke, lw=1.2, color=smoke_color,
-                                alpha=0.9, label="Smoke AOD")
-        ax_s.set_ylabel("Smoke AOD 550 nm", color=smoke_color)
-        ax_s.tick_params(axis="y", colors=smoke_color)
-        # Layer smoke beneath the SW anomaly: drop the twin axis below the
-        # primary, then make the primary's face transparent so smoke shows
-        # through. (matplotlib draws twinx on top by default — zorder alone
-        # isn't enough.)
-        ax_s.set_zorder(ax_a.get_zorder() - 1)
-        ax_a.patch.set_alpha(0.0)
-
-        # Mark the four highest-smoke-AOD months in the record. Label each
-        # smoke marker with the year; mirror the marker on the SW-anomaly
-        # trace in orange.
-        smoke_vals = smoke.values
-        years = pd.DatetimeIndex(smoke["time"].values).year
-        sw_vals = ds[clr_var].values if clr_var in ds else np.full_like(smoke_vals, np.nan)
-        df = pd.DataFrame({"time": smoke["time"].values, "smoke": smoke_vals,
-                           "sw": sw_vals, "year": years})
-        # EAU's Black Summer (Dec 2019 + Jan 2020) takes two of the top slots,
-        # so bump to 5 there to keep four distinct fire events labeled.
-        top_n = 5 if ds.attrs.get("region") == "eastern-australia" else 4
-        peaks = df.dropna(subset=["smoke"]).nlargest(top_n, "smoke").sort_values("time")
-        if not peaks.empty:
-            # Markers and labels go on ax_a (the top-drawn axis) so they sit
-            # above the SW-anomaly fill. Use a blended transform: x in time
-            # data coords (shared), y in ax_s's smoke-AOD coords.
-            import matplotlib.dates as mdates
-            from matplotlib.transforms import blended_transform_factory
-            trans_smoke = blended_transform_factory(ax_a.transData, ax_s.transData)
-            peak_xnum = mdates.date2num(peaks["time"].values)
-            ax_a.scatter(peak_xnum, peaks["smoke"], s=42, facecolor="black",
-                         edgecolor="white", linewidths=0.6,
-                         transform=trans_smoke, zorder=20, clip_on=False)
-            for x_num, row in zip(peak_xnum, peaks.itertuples(index=False)):
-                label = pd.Timestamp(row.time).strftime("%b %Y")
-                ax_a.annotate(
-                    label, xy=(x_num, row.smoke),
-                    xycoords=trans_smoke,
-                    xytext=(6, 0), textcoords="offset points",
-                    ha="left", va="center", fontsize=8, color="black",
-                    zorder=21, clip_on=False,
-                )
-            valid_sw = peaks.dropna(subset=["sw"])
-            if not valid_sw.empty:
-                sw_colors = [pos_color if v >= 0 else neg_color for v in valid_sw["sw"]]
-                ax_a.scatter(valid_sw["time"], valid_sw["sw"], s=42,
-                             facecolor=sw_colors,
-                             edgecolor="white", linewidths=0.6, zorder=20)
-        # Combine legends from both y-axes.
+    smoke, smoke_label = _smoke_series(ds, smoke_source)
+    if smoke is not None:
+        ax_s = _render_smoke_twinx(ax_a, ds, smoke, smoke_label,
+                                   sw_for_peaks=sw_series,
+                                   pos_color=pos_color, neg_color=neg_color)
         handles, labels = ax_a.get_legend_handles_labels()
         h2, l2 = ax_s.get_legend_handles_labels()
         ax_a.legend(handles + h2, labels + l2, fontsize=8, loc="upper left")
     else:
         ax_a.legend(fontsize=8, loc="upper left")
 
-    axes[-1].set_xlabel("Year")
-    _apply_date_range(axes[-1])
-    fig.suptitle(f"AOD and CERES SW {title_tag} {sky_label} Anomaly — {_region_label(ds)}")
+    last_ax.set_xlabel("Year")
+    _apply_date_range(last_ax)
+    fig.suptitle(
+        f"{flux_label} SW {title_tag} {sky_label} Anomaly — {_region_label(ds)}"
+        if not show_aod_panel else
+        f"AOD and {flux_label} SW {title_tag} {sky_label} Anomaly — {_region_label(ds)}"
+    )
+    fig.tight_layout()
+    save_figure(fig, output)
+
+
+def _plot_dF_compare(
+    ds: xr.Dataset, kind: str, output, sky: str = "clr",
+    smoke_source: str = "merra2",
+) -> None:
+    """Single panel: CERES and MERRA-2 SW anomalies overlaid + smoke AOD twinx.
+
+    Both series share the W m⁻² axis. CERES is the observational reference
+    (red, with anomaly fill); MERRA-2 is overlaid as a dashed line in
+    purple to read as "the model's claim" against the observation. SWTNT
+    is already negated by `_sw_anom_series` so the two share sign
+    convention (positive ΔF = more outgoing SW at TOA / more incoming SW
+    at SFC).
+    """
+    if sky not in ("clr", "all"):
+        raise ValueError(f"sky must be 'clr' or 'all', got {sky!r}")
+    sky_label = "Clear-Sky" if sky == "clr" else "All-Sky"
+    ceres_sw, _ = _sw_anom_series(ds, kind, sky, "ceres")
+    merra2_sw, _ = _sw_anom_series(ds, kind, sky, "merra2")
+    if kind == "sfc":
+        ylabel_anom = f"ΔF$_{{SFC,SW↓}}$ {sky_label} (W m⁻²)"
+        title_tag = "Surface"
+    elif kind == "toa":
+        ylabel_anom = f"ΔF$_{{TOA,SW}}$ {sky_label} (W m⁻²)"
+        title_tag = "TOA"
+    else:
+        raise ValueError(f"kind must be 'sfc' or 'toa', got {kind!r}")
+
+    fig, ax_a = plt.subplots(1, 1, figsize=(11, 5))
+    pos_color = NCAR_COLORS["ncar_blue"]
+    neg_color = NCAR_COLORS["orange"]
+    ceres_color = NCAR_COLORS["red"]
+    merra2_color = "0.25"  # dark gray — clean against the blue/orange fills
+
+    # Both records get an anomaly fill in the same blue/orange palette at
+    # low alpha. Where they agree on sign at a given month the two fills
+    # stack and alpha-composite to a darker shade — that darker overlap
+    # *is* the agreement signal, no extra annotation needed. Where they
+    # disagree, you get a light orange below zero alongside light blue
+    # above (or vice versa) and the eye reads the divergence directly.
+    fill_alpha = 0.30
+    ax_a.axhline(0, color=NCAR_COLORS["gray"], lw=0.8, zorder=1)
+    times = ds["time"].values
+    for series, lbl_prefix, line_color, line_lw, line_z in [
+        (ceres_sw,  "CERES",   ceres_color,  1.4, 4),
+        (merra2_sw, "MERRA-2", merra2_color, 1.0, 3),
+    ]:
+        if series is None:
+            continue
+        vals = series.values
+        ax_a.fill_between(times, 0, vals, where=vals >= 0,
+                          color=pos_color, alpha=fill_alpha,
+                          zorder=1, interpolate=True)
+        ax_a.fill_between(times, 0, vals, where=vals < 0,
+                          color=neg_color, alpha=fill_alpha,
+                          zorder=1, interpolate=True)
+        ax_a.plot(times, vals, lw=line_lw, color=line_color,
+                  zorder=line_z, label=f"{lbl_prefix} ΔF {sky_label}")
+    ax_a.set_ylabel(ylabel_anom)
+    if kind == "sfc":
+        ax_a.invert_yaxis()
+
+    smoke, smoke_label = _smoke_series(ds, smoke_source)
+    if smoke is not None:
+        # Use CERES for peak markers when present; fall back to MERRA-2.
+        sw_for_peaks = ceres_sw if ceres_sw is not None else merra2_sw
+        ax_s = _render_smoke_twinx(ax_a, ds, smoke, smoke_label,
+                                   sw_for_peaks=sw_for_peaks,
+                                   pos_color=pos_color, neg_color=neg_color)
+        handles, labels = ax_a.get_legend_handles_labels()
+        h2, l2 = ax_s.get_legend_handles_labels()
+        ax_a.legend(handles + h2, labels + l2, fontsize=8, loc="upper left")
+    else:
+        ax_a.legend(fontsize=8, loc="upper left")
+
+    ax_a.set_xlabel("Year")
+    _apply_date_range(ax_a)
+    fig.suptitle(
+        f"CERES vs MERRA-2 SW {title_tag} {sky_label} Anomaly — {_region_label(ds)}"
+    )
     fig.tight_layout()
     save_figure(fig, output)
 
@@ -850,6 +1007,57 @@ def plot_aod_sfc_all(ds: xr.Dataset, output) -> None:
 
 def plot_aod_toa_all(ds: xr.Dataset, output) -> None:
     _plot_aod_sw_pair(ds, kind="toa", output=output, sky="all")
+
+
+# MERRA-2 analogues. Single-panel: SW anomaly + MERRA-2-internal smoke AOD
+# on twinx. Reads the MERRA-2 rad fluxes (SWGDN[CLR] at SFC, −SWTNT[CLR]
+# at TOA — sign-aligned with CERES outgoing convention by `_sw_anom_series`)
+# and pairs them with smoke_aod_merra2, so flux and smoke come from the
+# same model. The total-AOD timeseries is omitted; refer to the dedicated
+# AOD plots for that view.
+def plot_aod_sfc_merra2(ds: xr.Dataset, output) -> None:
+    _plot_aod_sw_pair(ds, kind="sfc", output=output, sky="clr",
+                      flux_source="merra2", smoke_source="merra2",
+                      show_aod_panel=False)
+
+
+def plot_aod_toa_merra2(ds: xr.Dataset, output) -> None:
+    _plot_aod_sw_pair(ds, kind="toa", output=output, sky="clr",
+                      flux_source="merra2", smoke_source="merra2",
+                      show_aod_panel=False)
+
+
+def plot_aod_sfc_all_merra2(ds: xr.Dataset, output) -> None:
+    _plot_aod_sw_pair(ds, kind="sfc", output=output, sky="all",
+                      flux_source="merra2", smoke_source="merra2",
+                      show_aod_panel=False)
+
+
+def plot_aod_toa_all_merra2(ds: xr.Dataset, output) -> None:
+    _plot_aod_sw_pair(ds, kind="toa", output=output, sky="all",
+                      flux_source="merra2", smoke_source="merra2",
+                      show_aod_panel=False)
+
+
+# CERES vs MERRA-2 ΔF on a single panel. Useful as an obs-vs-model
+# diagnostic — same units, same sign convention; gaps between the two
+# lines flag radiative-transfer disagreements (clouds, surface albedo,
+# aerosol mix). Smoke AOD on the twin axis is MERRA-2-internal so the
+# model's "what should happen" reading is self-consistent.
+def plot_dF_sfc_compare(ds: xr.Dataset, output) -> None:
+    _plot_dF_compare(ds, kind="sfc", output=output, sky="clr")
+
+
+def plot_dF_toa_compare(ds: xr.Dataset, output) -> None:
+    _plot_dF_compare(ds, kind="toa", output=output, sky="clr")
+
+
+def plot_dF_sfc_all_compare(ds: xr.Dataset, output) -> None:
+    _plot_dF_compare(ds, kind="sfc", output=output, sky="all")
+
+
+def plot_dF_toa_all_compare(ds: xr.Dataset, output) -> None:
+    _plot_dF_compare(ds, kind="toa", output=output, sky="all")
 
 
 def plot_ceres_toa_anomaly(ds: xr.Dataset, output) -> None:

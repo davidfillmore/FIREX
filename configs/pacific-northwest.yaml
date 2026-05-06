@@ -17,6 +17,7 @@ paths:
   viirs_noaa20: "~/Data/VIIRS/AERDB_M3_VIIRS_NOAA20"
   merra2_aer: "~/Data/MERRA2_tavgM/aer_Nx"
   merra2_slv: "~/Data/MERRA2_tavgM/slv_Nx"
+  merra2_rad: "~/Data/MERRA2_tavgM/rad_Nx"
   qfed: "~/Data/QFED"
   aeronet: "~/Data/AeroNet"
 
@@ -35,6 +36,14 @@ plots:
   - aod_toa
   - aod_sfc_all
   - aod_toa_all
+  - aod_sfc_merra2
+  - aod_toa_merra2
+  - aod_sfc_all_merra2
+  - aod_toa_all_merra2
+  - dF_sfc_compare
+  - dF_toa_compare
+  - dF_sfc_all_compare
+  - dF_toa_all_compare
   - qfed_smoke_aod
   - qfed_vs_smoke_aod_scatter
   - smoke_radiative_efficiency

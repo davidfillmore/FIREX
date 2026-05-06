@@ -151,8 +151,10 @@ def _stage2_loaders(cfg: dict, out_dir: Path, mask_path: Path, force: bool) -> d
             logger.info("[stage 2] VIIRS %s → %s (%d files)", plat, out_path, len(files))
         out[key] = out_path
 
-    # MERRA-2 aer + slv (slv is optional — skip if not staged)
-    for coll, key in [("aer", "merra2_aer"), ("slv", "merra2_slv")]:
+    # MERRA-2 aer + slv + rad (slv/rad optional — skip if not staged or path not configured)
+    for coll, key in [("aer", "merra2_aer"), ("slv", "merra2_slv"), ("rad", "merra2_rad")]:
+        if key not in cfg["paths"]:
+            continue
         coll_root = Path(cfg["paths"][key]).expanduser()
         files = _glob_files(coll_root, "*.nc4")
         if not files:
@@ -308,6 +310,22 @@ def _stage6_plots(cfg: dict, merged_path: Path, out_dir: Path, force: bool) -> N
             lambda: plots.plot_aod_sfc_all(merged, plots_dir / "aod_sfc_all.png"),
         "aod_toa_all":
             lambda: plots.plot_aod_toa_all(merged, plots_dir / "aod_toa_all.png"),
+        "aod_sfc_merra2":
+            lambda: plots.plot_aod_sfc_merra2(merged, plots_dir / "aod_sfc_merra2.png"),
+        "aod_toa_merra2":
+            lambda: plots.plot_aod_toa_merra2(merged, plots_dir / "aod_toa_merra2.png"),
+        "aod_sfc_all_merra2":
+            lambda: plots.plot_aod_sfc_all_merra2(merged, plots_dir / "aod_sfc_all_merra2.png"),
+        "aod_toa_all_merra2":
+            lambda: plots.plot_aod_toa_all_merra2(merged, plots_dir / "aod_toa_all_merra2.png"),
+        "dF_sfc_compare":
+            lambda: plots.plot_dF_sfc_compare(merged, plots_dir / "dF_sfc_compare.png"),
+        "dF_toa_compare":
+            lambda: plots.plot_dF_toa_compare(merged, plots_dir / "dF_toa_compare.png"),
+        "dF_sfc_all_compare":
+            lambda: plots.plot_dF_sfc_all_compare(merged, plots_dir / "dF_sfc_all_compare.png"),
+        "dF_toa_all_compare":
+            lambda: plots.plot_dF_toa_all_compare(merged, plots_dir / "dF_toa_all_compare.png"),
         "qfed_smoke_aod":
             lambda: plots.plot_qfed_smoke_aod(merged, plots_dir / "qfed_smoke_aod.png"),
         "qfed_vs_smoke_aod_scatter":
@@ -381,7 +399,8 @@ def main(argv: list[str] | None = None) -> int:
     else:
         # Resume mode: only include stage-2 outputs that actually exist on disk.
         candidate_keys = ("ceres_ebaf", "modis_terra", "modis_aqua", "viirs_snpp",
-                          "viirs_noaa20", "merra2_aer", "merra2_slv", "qfed", "aeronet")
+                          "viirs_noaa20", "merra2_aer", "merra2_slv", "merra2_rad",
+                          "qfed", "aeronet")
         # Aeronet writes as `aeronet_pnw.nc`, not `aeronet.nc`.
         stage2 = {}
         for k in candidate_keys:

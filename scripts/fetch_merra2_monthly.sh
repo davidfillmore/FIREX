@@ -15,6 +15,7 @@
 #   slv_Nx (M2TMNXSLV) — single-level surface meteorology (T2M, U10M, V10M, TQV)
 #   lnd_Nx (M2TMNXLND) — land surface (soil moisture, runoff, snow)
 #   flx_Nx (M2TMNXFLX) — surface turbulent fluxes (PBLH, SHFLX, EFLUX, USTAR)
+#   rad_Nx (M2TMNXRAD) — SFC+TOA SW/LW all- and clear-sky fluxes, CLDTOT (CERES analogues)
 # Note: there is no 2D monthly CHM collection — chemistry is only available on model
 # levels (M2I3NVCHM daily) or pressure levels (M2TMNPCHM monthly 3D). Add separately
 # if needed; M2TMNPCHM is large.
@@ -71,13 +72,14 @@ merra2_stream_fallback() {
   if (( y >= 2011 )); then echo 401; else echo ""; fi
 }
 
-# Map short collection code (aer/slv/lnd/flx) → GES DISC product identifier (M2TMNX{ID}).
+# Map short collection code (aer/slv/lnd/flx/rad) → GES DISC product identifier (M2TMNX{ID}).
 collection_id() {
   case "$1" in
     aer) echo AER ;;
     slv) echo SLV ;;
     lnd) echo LND ;;
     flx) echo FLX ;;
+    rad) echo RAD ;;
     *)   echo "" ;;
   esac
 }
