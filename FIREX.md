@@ -15,7 +15,7 @@ Key quantities we want to produce per region:
 
 - **Time:** 2000-03 → present, monthly. Constrained by CERES EBAF start.
 - **Spatial scale:** regional monthly means (single time series per region) is the primary unit. 1°×1° gridded fields are the working layer; regional masks aggregate to time series.
-- **Regions:** the registry below covers the major biomass-burning biomes globally. Three are *featured* — the story arc for the current presentation; the others are defined for future analysis. Bboxes are loose enough to capture transport receptors as well as source areas. Definitive entries live in `firex/regions.py`; this table mirrors them.
+- **Regions:** the registry below covers the major biomass-burning biomes globally. Four are *featured* — the story arc for the current presentation; the others are defined for future analysis. Bboxes are loose enough to capture transport receptors as well as source areas. Definitive entries live in `firex/regions.py`; this table mirrors them.
 
 | Region | bbox (lon, lat) | Featured | Notes |
 |---|---|:---:|---|
@@ -25,7 +25,7 @@ Key quantities we want to produce per region:
 | western-canada | 130°W–105°W, 52°N–62°N |  | 2023 NWT/BC; Yellowknife evacuation |
 | alaska | 165°W–141°W, 60°N–72°N |  | 2004 record season, 2022 boreal |
 | california | 124°W–114°W, 32°N–42°N |  | 2018 Camp; 2020 Creek and August Complex |
-| eastern-siberia | 110°E–155°E, 55°N–72°N |  | 2019 / 2021 Yakutia megafires |
+| eastern-siberia | 110°E–155°E, 55°N–72°N | ★ | 2019 / 2021 Yakutia megafires |
 | central-africa | 15°E–35°E, 15°S–5°N |  | World's largest savanna BB region by area |
 | amazon | 75°W–50°W, 15°S–5°S |  | Deforestation arc; 2019 / 2023 events |
 | maritime-se-asia | 95°E–120°E, 5°S–5°N |  | Indonesian peat fires; 2015 ENSO event |
@@ -54,7 +54,7 @@ Total observed AOD includes smoke + dust + sulfate + sea salt + nitrate. To isol
 
 ### Primary: MERRA-2 speciated AOD, scaled to observations
 
-MERRA-2 ingests QFED as its biomass-burning emission and runs full transport/aging chemistry. We trust MERRA-2's *fractional* species split more than its absolute AOD. The `aer_Nx` collection exposes only species totals (`BCEXTTAU`, `OCEXTTAU`, …) — there is no built-in biomass-burning split — so we approximate the smoke contribution with a per-month-of-year background subtraction:
+MERRA-2 ingests QFED as its biomass-burning emission and runs full transport/aging chemistry. We use MERRA-2 for an internally consistent *fractional* species split, while anchoring the final smoke-AOD magnitude to observed MODIS/VIIRS AOD. The `aer_Nx` collection exposes only species totals (`BCEXTTAU`, `OCEXTTAU`, …) — there is no built-in biomass-burning split — so we approximate the smoke contribution with a per-month-of-year background subtraction:
 
 ```
 BC_bg(m)              =  10th-percentile of BCEXTTAU across all years for calendar month m
