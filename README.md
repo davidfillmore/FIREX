@@ -1,2 +1,2 @@
 # FIREX
-Wildfire Explorer
+Fire Intelligence and Regional Emissions Explorer
