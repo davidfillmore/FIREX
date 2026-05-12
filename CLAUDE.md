@@ -172,16 +172,26 @@ interpolated onto the CERES 1° grid and cached at
 
 Builders in `firex/global_plots.py`:
 
-- `plot_smoke_aod_seasonal`     — 2×2 DJF/MAM/JJA/SON climatology
-- `plot_smoke_radiative_effect` — 1×2 TOA + SFC β·⟨AOD⟩ panels
-- `plot_event_anomaly`          — 2×2 per event from `EVENT_CATALOG`
-- `plot_seasonal_climatology`   — generic single-var seasonal mean,
-                                  optional `period` window + `seasons`
-                                  tuple for single-panel cuts
-- `plot_seasonal_anomaly`       — generic target-minus-baseline anomaly,
-                                  same panel/season knobs plus `sign`
-                                  and `invert_cbar` for flipping the
-                                  reading direction
+- `plot_smoke_aod_seasonal`         — 2×2 DJF/MAM/JJA/SON climatology
+- `plot_smoke_radiative_effect`     — 1×2 TOA + SFC β·⟨AOD⟩ panels
+- `plot_event_anomaly`              — 2×2 per event from `EVENT_CATALOG`
+- `plot_seasonal_climatology`       — generic single-var seasonal mean,
+                                      optional `period` window + `seasons`
+                                      tuple for single-panel cuts
+- `plot_seasonal_anomaly`           — generic target-minus-baseline anomaly,
+                                      same panel/season knobs plus `sign`
+                                      and `invert_cbar` for flipping the
+                                      reading direction
+- `plot_total_aod_match_vs_merra2`  — two-panel side-by-side total-AOD
+                                      anomaly from MATCH Ed4 and MERRA-2
+                                      on a shared scale; an independent
+                                      satellite-derived check on MERRA-2
+
+`load_match_modis()` opens the MATCH Terra-Aqua MODIS Ed4 TOTEXTTAU
+stream from `~/Data/MATCH/` (192×94 T62-like Gaussian grid, no
+embedded time coord — year-month parsed from filename). Coverage is
+2000-03 through 2024-09, so MATCH-vs-MERRA-2 comparisons cap the
+target window at 2024-09.
 
 Smoke-AOD climatology maps use `cmap='Spectral_r'` with the
 log-spaced `SMOKE_AOD_LEVELS` BoundaryNorm (see `smoke_aod_norm()`),

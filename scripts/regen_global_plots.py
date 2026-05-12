@@ -114,6 +114,30 @@ def main() -> int:
                     "2020–2025 minus 2000–2019"),
              gridlines=False, region_boxes=False,
              seasons=("JJA",), invert_cbar=True))
+
+    # MATCH Ed4 total-AOD anomaly (independent satellite-derived check on
+    # MERRA-2). Target window ends 2024-09 to match MATCH coverage.
+    match_target = ("2020-01", "2024-09")
+    try:
+        match = global_plots.load_match_modis()
+        for season in ("DJF", "JJA"):
+            _run(f"match_aod_{season.lower()}_anom",
+                 lambda s=season: global_plots.plot_seasonal_anomaly(
+                     match, "match_aod",
+                     out_dir / f"match_aod_{s.lower()}_anom.png",
+                     baseline=baseline, target=match_target,
+                     cmap="PuOr_r", lim=0.20,
+                     cbar_label=r"$\Delta$AOD",
+                     title=(f"MATCH Ed4 Total AOD — {s}, "
+                            "2020–2024 minus 2000–2019"),
+                     gridlines=False, region_boxes=False, seasons=(s,)))
+        _run("total_aod_jja_anom_match_vs_merra2",
+             lambda: global_plots.plot_total_aod_match_vs_merra2(
+                 "JJA",
+                 out_dir / "total_aod_jja_anom_match_vs_merra2.png",
+                 baseline=baseline, target=match_target))
+    except FileNotFoundError as e:
+        log.warning("skipping MATCH plots: %s", e)
     _run("sfc_sw_clr_seasonal_2000_2019",
          lambda: global_plots.plot_seasonal_climatology(
              ds, "sfc_sw_down_clr",

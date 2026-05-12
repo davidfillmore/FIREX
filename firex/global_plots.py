@@ -33,6 +33,7 @@ from firex.regions import REGIONS
 MERRA2_AER_DIR = Path.home() / "Data" / "MERRA2_tavgM" / "aer_Nx"
 CERES_FILE = Path.home() / "Data" / "CERES_EBAF" / "ceres" / \
     "CERES_EBAF_Edition4.2.1_200003-202512.nc"
+MATCH_DIR = Path.home() / "Data" / "MATCH"
 CACHE_FILE = Path.home() / "FIREX" / "output" / "global" / "data" / \
     "global_monthly.nc"
 
@@ -124,6 +125,41 @@ def build_global_dataset(rebuild: bool = False) -> xr.Dataset:
     out.load().to_netcdf(tmp)
     tmp.rename(CACHE_FILE)
     return xr.open_dataset(CACHE_FILE).load()
+
+
+def load_match_modis(time_range: tuple[str, str] | None = None) -> xr.Dataset:
+    """Load the MATCH Terra-Aqua MODIS Ed4 monthly TOTEXTTAU stream.
+
+    Files are one-month each (~10 KB) on a 192×94 T62-like Gaussian grid
+    with no embedded time coord; the year-month is parsed from the
+    filename and the singleton time dim is replaced with a mid-month
+    datetime axis. Longitude is wrapped to [-180, 180].
+
+    Returns Dataset with `match_aod` on (time, lat, lon).
+    """
+    pattern = "MATCH_Terra-Aqua-MODIS_Ed4.TOTEXTTAU_L192x94.*.nc4"
+    files = sorted(MATCH_DIR.glob(pattern))
+    if not files:
+        raise FileNotFoundError(f"no MATCH MODIS files under {MATCH_DIR}")
+    monthlies: list[xr.DataArray] = []
+    times: list[np.datetime64] = []
+    for f in files:
+        ym = f.stem.rsplit(".", 1)[-1]  # "YYYY-MM"
+        if time_range is not None and not (time_range[0] <= ym <= time_range[1]):
+            continue
+        d = xr.open_dataset(f)
+        monthlies.append(d["TOTEXTTAU"].isel(time=0))
+        times.append(np.datetime64(f"{ym}-15"))
+    if not monthlies:
+        raise ValueError(f"no MATCH files matched time_range={time_range}")
+    time_dt = xr.DataArray(np.array(times, dtype="datetime64[ns]"),
+                           dims="time", name="time")
+    stack = xr.concat(monthlies, dim=time_dt)
+    if float(stack["lon"].max()) > 180:
+        stack = stack.assign_coords(
+            lon=(((stack["lon"] + 180) % 360) - 180)
+        ).sortby("lon")
+    return xr.Dataset({"match_aod": stack})
 
 
 # ── Map helpers ───────────────────────────────────────────────────────
@@ -294,6 +330,60 @@ def plot_seasonal_anomaly(
                            diverging=True,
                            gridlines=gridlines, region_boxes=region_boxes,
                            seasons=seasons, invert_cbar=invert_cbar)
+
+
+def plot_total_aod_match_vs_merra2(
+    season: str, output: Path,
+    *, baseline: tuple[str, str] = ("2000-03", "2019-12"),
+    target: tuple[str, str] = ("2020-01", "2024-09"),
+    cmap: str = "PuOr_r", lim: float = 0.20,
+) -> None:
+    """Two-panel side-by-side: total AOD anomaly from MATCH and MERRA-2.
+
+    Baseline window default matches MATCH MODIS Ed4's coverage (it stops
+    at 2024-09). MERRA-2 is sliced to the same window for a fair
+    comparison.
+    """
+    match = load_match_modis(time_range=(baseline[0], target[1]))
+    merra = build_global_dataset()
+
+    def _seasonal_anom(da: xr.DataArray) -> xr.DataArray:
+        b = da.sel(time=slice(*baseline)).groupby("time.season").mean("time")
+        t = da.sel(time=slice(*target)).groupby("time.season").mean("time")
+        return t.sel(season=season) - b.sel(season=season)
+
+    match_anom = _seasonal_anom(match["match_aod"])
+    merra_anom = _seasonal_anom(merra["total_aod"])
+
+    proj = ccrs.Robinson(central_longitude=0)
+    fig, axes = plt.subplots(
+        1, 2, figsize=(16, 5), subplot_kw={"projection": proj},
+    )
+    mesh = None
+    for ax, field, panel_title in [
+        (axes[0], match_anom, "MATCH Ed4 Total AOD"),
+        (axes[1], merra_anom, "MERRA-2 Total AOD"),
+    ]:
+        ax.set_global()
+        _add_base_features(ax, gridlines=False)
+        mesh = ax.pcolormesh(
+            field["lon"], field["lat"], field,
+            cmap=cmap, vmin=-lim, vmax=lim,
+            shading="auto", transform=ccrs.PlateCarree(),
+            rasterized=True,
+        )
+        ax.set_title(panel_title, fontsize=12)
+
+    fig.subplots_adjust(right=0.92, wspace=0.04)
+    cax = fig.add_axes([0.94, 0.18, 0.014, 0.64])
+    fig.colorbar(mesh, cax=cax, label=r"$\Delta$AOD")
+    yr0, yr1 = baseline[0][:4], baseline[1][:4]
+    yr2, yr3 = target[0][:4], target[1][:4]
+    fig.suptitle(
+        f"Total AOD — {season}, {yr2}–{yr3} minus {yr0}–{yr1}",
+        fontsize=14, color=NCAR_COLORS["space"],
+    )
+    save_figure(fig, output)
 
 
 # ── Figure 1: seasonal smoke-AOD climatology (2×2) ─────────────────────
