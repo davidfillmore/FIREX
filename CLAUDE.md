@@ -161,6 +161,38 @@ Workflow for adding or modifying a slug:
    stays put, but the slug exits the review queue and won't re-stage
    on the next sync.
 
+### Global spatial plots
+
+Canonical store: `~/FIREX/output/global/plots/` —
+`scripts/regen_global_plots.py` renders global maps from MERRA-2 aer_Nx
+(smoke AOD = BCEXTTAU + OCEXTTAU) and CERES EBAF clear-sky fluxes,
+interpolated onto the CERES 1° grid and cached at
+`output/global/data/global_monthly.nc`. Run from the davinci-monet env
+(needs dask).
+
+Builders in `firex/global_plots.py`:
+
+- `plot_smoke_aod_seasonal`     — 2×2 DJF/MAM/JJA/SON climatology
+- `plot_smoke_radiative_effect` — 1×2 TOA + SFC β·⟨AOD⟩ panels
+- `plot_event_anomaly`          — 2×2 per event from `EVENT_CATALOG`
+- `plot_seasonal_climatology`   — generic single-var seasonal mean,
+                                  optional `period` window + `seasons`
+                                  tuple for single-panel cuts
+- `plot_seasonal_anomaly`       — generic target-minus-baseline anomaly,
+                                  same panel/season knobs plus `sign`
+                                  and `invert_cbar` for flipping the
+                                  reading direction
+
+Smoke-AOD climatology maps use `cmap='Spectral_r'` with the
+log-spaced `SMOKE_AOD_LEVELS` BoundaryNorm (see `smoke_aod_norm()`),
+which resolves both the central-African burning peak (~0.3–0.5) and
+the global background (~0.005–0.02) on the same scale. Smoke-AOD
+anomaly maps use `PuOr_r`, ±0.20. Surface SW clear-sky anomaly uses
+`RdBu` with `invert_cbar=True` so fire-impact direction (negative ΔSW)
+sits at the top of the scale in warm colors, consistent with the
+smoke-AOD anomaly aesthetic. All pcolormesh calls are rasterized to
+keep PDF file sizes small.
+
 ## Running a long transfer
 
 For any transfer expected to run more than a few minutes, launch detached so it survives the terminal/session closing and the Mac going to sleep:
